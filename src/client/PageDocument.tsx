@@ -21,6 +21,7 @@ import { usePageAutosave } from './editor/use-page-autosave';
 import { inspectMarkdown } from './editor/markdown';
 import { DocumentMenu } from './editor/DocumentMenu';
 import { PageConversation } from './PageConversation';
+import { PageHistory } from './PageHistory';
 const RichEditor = lazy(() => import('./editor/RichEditor'));
 export function PageDocument({
   page,
@@ -221,11 +222,11 @@ export function PageDocument({
                   ]
                 : []),
               {
-                label: 'Delete page',
+                label: 'Move to Trash',
                 action: async () => {
                   if (
                     !window.confirm(
-                      `Delete "${draft.title || 'Untitled'}"? This can't be undone. Any subpages will move to this page's parent.`,
+                      `Move "${draft.title || 'Untitled'}" to Trash? You can restore it from the Space library. Any subpages will move to this page's parent.`,
                     )
                   )
                     return;
@@ -313,6 +314,15 @@ export function PageDocument({
                 <button onClick={() => setMove(false)}>Done</button>
               </div>
             )}
+            <PageHistory
+              page={page}
+              onRestored={(next) => {
+                controller.receive(next);
+                controller.useLatest();
+                onSaved(next);
+                setNotice('');
+              }}
+            />
             <input
               className="document-title"
               aria-label="Page title"
