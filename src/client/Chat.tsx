@@ -9,7 +9,6 @@ import { contextualMessage, type PageContext } from './page-context';
 import { api } from './api';
 import type { Page } from '../server/pages';
 import { useEffect, useRef, useState } from 'react';
-import { CopilotKitCoreErrorCode } from '@copilotkit/core';
 import {
   CopilotChatToolCallsView,
   useRenderTool,
@@ -98,8 +97,6 @@ export function Chat({
   const [source, setSource] = useState('');
   const [sourceOpen, setSourceOpen] = useState(false);
   const [error, setError] = useState('');
-  const [runError, setRunError] = useState('');
-  const chatError = error || runError;
   const [loaded, setLoaded] = useState(false);
   const [running, setRunning] = useState(false);
   const voice = useVoice(thread.id, onSaved, agent.messages.at(-1)?.id);
@@ -107,22 +104,10 @@ export function Chat({
   const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const subscription = copilotkit.subscribe({
-      onError: ({ error, code }) => {
-        if (
-          code === CopilotKitCoreErrorCode.AGENT_RUN_ERROR_EVENT ||
-          code === CopilotKitCoreErrorCode.AGENT_RUN_FAILED_EVENT ||
-          code === CopilotKitCoreErrorCode.AGENT_RUN_FAILED ||
-          code === CopilotKitCoreErrorCode.AGENT_THREAD_LOCKED
-        )
-          setRunError(error.message);
-        else setError(error.message);
-      },
+      onError: ({ error }) => setError(error.message),
     });
     const events = agent.subscribe({
-      onRunErrorEvent: ({ event }) => setRunError(event.message),
-      onRunFinishedEvent: ({ outcome }) => {
-        if (outcome === 'success') setRunError('');
-      },
+      onRunErrorEvent: ({ event }) => setError(event.message),
     });
     return () => {
       subscription.unsubscribe();
@@ -150,10 +135,9 @@ export function Chat({
   const send = async (text: string) => {
     if (!text.trim() || running || !loaded || !contextReady || paused) return;
     setError('');
-    setRunError('');
     setRunning(true);
     agent.addMessage({
-      id: crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`,
+      id: crypto.randomUUID(),
       role: 'user',
       content: contextualMessage(text, pageContext),
     });
@@ -168,7 +152,7 @@ export function Chat({
         );
       onSaved();
     } catch (e) {
-      setRunError(
+      setError(
         e instanceof Error
           ? e.message
           : 'The turn failed. Your conversation remains saved.',
@@ -253,7 +237,6 @@ export function Chat({
           message.toolCalls?.some(
             (call) =>
               call.function.name.startsWith('computer_') ||
-              call.function.name === 'COMPOSIO_MANAGE_CONNECTIONS' ||
               call.function.name === pageReviewTool.name ||
               call.function.name === connectionActionTool.name,
           ))),
@@ -382,14 +365,13 @@ export function Chat({
           </button>
         </div>
       )}
-      {(chatError || voice.error) && (
+      {(error || voice.error) && (
         <div className="chat-error" role="alert">
-          {chatError || voice.error}
-          {chatError && (
+          {error || voice.error}
+          {error && (
             <button
               onClick={() => {
                 setError('');
-                setRunError('');
                 void copilotkit
                   .connectAgent({ agent })
                   .then(() => setLoaded(true))
