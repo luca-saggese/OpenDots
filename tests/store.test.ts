@@ -112,6 +112,36 @@ describe('durable task lifecycle', () => {
     },
   );
   it('claims other queued work while an expired run waits for review', () => {
+  it('persists inbox items and watcher state', () => {
+    const { store } = fixture();
+    const item = store.createInboxItem(
+      'task_failed',
+      'Needs attention',
+      'Something failed.',
+      'task-1',
+    );
+    expect(store.unreadInboxCount()).toBe(1);
+    expect(store.inboxAction(item.id, 'read')?.readAt).toBeTruthy();
+    expect(store.unreadInboxCount()).toBe(0);
+    const watcher = store.createWatcher(
+      'https://example.com',
+      'Investigate changes',
+      'thread-1',
+      300,
+    );
+    expect(store.watchers()[0]?.enabled).toBe(true);
+    expect(store.watcherAction(watcher.id, 'pause')?.enabled).toBe(false);
+    expect(store.watcherAction(watcher.id, 'resume')?.enabled).toBe(true);
+    store.updateWatcherCheck(watcher.id, {
+      lastCheckedAt: 1000,
+      lastHash: 'abc',
+      nextCheckAt: 2000,
+      error: null,
+    });
+    expect(store.watchers()[0]?.lastHash).toBe('abc');
+    expect(store.watcherAction(watcher.id, 'delete')).toBeUndefined();
+    expect(store.watchers()).toHaveLength(0);
+  });
     const { store } = fixture();
     const interrupted = store.createTask('Create the first page');
     const now = Date.now();

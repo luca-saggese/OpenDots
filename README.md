@@ -2,7 +2,7 @@
 
 # OpenDots
 
-### Always-on AI coworkers that move between text, calls, and Slack.
+### Always-on AI coworkers that move between text, calls, Slack, and Telegram.
 
 **An open-source template for persistent AI agents, each with its own computer. Available on Web and Mobile.**
 
@@ -106,6 +106,17 @@ https://github.com/user-attachments/assets/3c06cf71-39ed-4e2b-b846-5463b2722389
 
 _Connect, talk, mute, minimize, and return to chat. This is a silent screen capture of a real call, with waiting time trimmed and playback accelerated._
 
+### Telegram
+
+Connect a Telegram bot directly to OpenDots with the CopilotKit Channels Telegram adapter. Long-polling is the default, so a public webhook endpoint is not required. Telegram users are mapped to the single OpenDots owner through an explicit numeric user-ID allowlist.
+
+In a private chat, every message is eligible. In groups, the bot responds when it is mentioned or when a user replies to one of its messages. The same Dot, tools, permissions, memory, and Intelligence conversation flow are used as web and Slack.
+
+See [Telegram setup](docs/SETUP.md#telegram) to configure the bot token, allowlist, selected Dot, and optional webhook mode.
+### Inbox and Watchers
+
+OpenDots includes a small proactive layer on top of scheduled work. The Inbox collects completed and failed task outcomes and watcher triggers in one place. Watchers monitor public HTTP(S) URLs and queue a normal task in an existing conversation when content changes.
+
 ### Slack
 
 Mention a Dot through a managed Slack connection using Channels SDK, then continue in its thread. The integration follows [OpenTag](https://github.com/CopilotKit/OpenTag), with an explicit workspace/user allowlist and a selected specialist. See [Slack setup](docs/SETUP.md#slack) to connect your deployment.
@@ -134,7 +145,8 @@ The template uses TanStack AI for model streaming and server-tool execution, Cop
 flowchart TB
   Web["Web app: pages, Spaces, Dots, chat"] -->|AG-UI| Runtime[CopilotKit runtime]
   Slack[Slack] <--> Managed[Managed channel connection]
-  Managed <--> Channels[Channels SDK]
+  Telegram[Telegram] --> Channels[Channels SDK]
+  Managed <--> Channels
   Channels --> Agents[Specialist compute agents]
   Runtime --> Agents
   Agents --> AI[TanStack AI]
@@ -209,6 +221,7 @@ CopilotKit SDK telemetry collects usage metadata separately from conversation pe
 | Navigation                 | Global command palette (Ctrl/⌘ K) with ranked cross-Space search over pages, Spaces, and Dots, plus keyboard-first commands                                         |
 
 Scheduled tasks run in their original conversation. If a worker stops or its lease expires during a run, OpenDots marks that run **Interrupted** and waits for an explicit retry. Review its pages and computer actions, then use **Retry after review** when appropriate. Completed effects may already be present even when a run has no final result.
+| Telegram                   | Direct Channels SDK adapter with explicit user allowlist and polling/webhook ingress                                                    |
 
 Local checks cover setup, persistence, permissions, SDK failure handling, and browser isolation. Automated tests use service fixtures. **Live Intelligence, model responses, and page-context chat were verified on September 29, 2026.** Live OpenBot computer browsing, file creation, shell verification, and file persistence across stop/start were also verified locally. Live Realtime speech, call controls, and receipt persistence were verified locally on September 30, 2026. Slack and spoken compute delegation still need connected-service verification. See [recording notes](docs/demos/README.md) for the demonstrated flows and limits.
 

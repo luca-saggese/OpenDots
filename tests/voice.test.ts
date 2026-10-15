@@ -51,6 +51,7 @@ function fixture() {
         browser: false,
         composio: false,
         slack: 'not_configured',
+        telegram: 'not_configured',
         missing: [],
       }),
     },
