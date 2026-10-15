@@ -1,7 +1,7 @@
 import { setupInputSchema } from './setup-telemetry.js';
 import { pageRoutes } from './page-routes.js';
 import { searchWorkspace } from './search.js';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { Platform } from './platform.js';
 import { VoiceService } from './voice.js';
@@ -9,6 +9,35 @@ import {
   learningContainerIdSchema,
   validateLearningSettings,
 } from '../shared/learning.js';
+const masterSessionSchema = z
+  .object({
+    name: z.string().trim().min(1).max(120),
+    description: z.string().max(4000).default(''),
+  })
+  .strict();
+const conversationParticipantIdsSchema = z.array(z.string().min(1)).max(100);
+const sessionAgentSchema = z
+  .object({
+    dotId: z.string().min(1),
+    role: z.string().trim().min(1).max(80),
+    displayName: z.string().trim().max(80).nullable().optional(),
+    mandate: z.string().trim().min(1).max(10000),
+    soulOverride: z.string().max(10000).default(''),
+  })
+  .strict();
+function sessionError(c: Context, error: unknown) {
+  const message =
+    error instanceof Error ? error.message : 'Master Session operation failed.';
+  const status = message.includes('not found')
+    ? 404
+    : message.includes('already') || message.includes('UNIQUE constraint')
+      ? 409
+      : message.includes('does not have access') ||
+          message.includes('does not belong')
+        ? 403
+        : 400;
+  return c.json({ error: message }, status);
+}
 const dotSchema = z
   .object({
     name: z.string().trim().min(1).max(40),
@@ -50,10 +79,675 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       spaces: platform.workspace.spaces(),
       dots: platform.workspace.dots(),
       conversations: platform.workspace.conversations(),
+      masterSessions: platform.workspace.masterSessions(),
       setup: platform.setup(),
       calls: platform.workspace.calls(),
     }),
   );
+  app.get('/master-sessions', (c) =>
+    c.json(platform.workspace.masterSessions()),
+  );
+  app.get('/office/member-templates', (c) =>
+    c.json(platform.workspace.memberTemplates(c.req.query('q') ?? '')),
+  );
+  app.get('/office/member-templates/:id', (c) => {
+    const template = platform.workspace.memberTemplate(c.req.param('id'));
+    return template
+      ? c.json(template)
+      : c.json({ error: 'Member Template not found.' }, 404);
+  });
+  app.get('/office/team-templates', (c) =>
+    c.json(platform.workspace.teamTemplates()),
+  );
+  app.get('/office/team-templates/:id', (c) => {
+    const template = platform.workspace.teamTemplate(c.req.param('id'));
+    return template
+      ? c.json(template)
+      : c.json({ error: 'Team Template not found.' }, 404);
+  });
+  app.get('/office/dots', (c) => c.json(platform.workspace.dotProfiles()));
+  app.get('/office/dots/:id/profile', (c) => {
+    try {
+      return c.json({
+        dot: platform.workspace.dot(c.req.param('id')),
+        profile: platform.workspace.dotProfile(c.req.param('id')),
+      });
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put('/office/dots/:id/profile', async (c) => {
+    const data = z
+      .object({
+        summary: z.string().max(2000),
+        skills: z.array(z.string().trim().min(1).max(80)).max(30),
+        workStyle: z.string().max(2000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid collaborator profile.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.updateDotProfile(c.req.param('id'), data.data),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/office/dots/from-template', async (c) => {
+    const data = z
+      .object({
+        memberTemplateId: z.string().min(1),
+        name: z.string().trim().min(1).max(40),
+        customization: z.string().max(1200).default(''),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a valid collaborator template and name.' },
+        400,
+      );
+    try {
+      return c.json(
+        platform.workspace.createDotFromMemberTemplate(data.data),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/office/projects', async (c) => {
+    const data = z
+      .object({
+        creationKey: z.string().trim().min(1).max(120),
+        name: z.string().trim().min(1).max(120),
+        description: z.string().max(4000).default(''),
+        team: z
+          .array(
+            z
+              .object({
+                id: z.string().min(1).optional(),
+                dotId: z.string().min(1).optional(),
+                memberTemplateId: z.string().min(1).optional(),
+                name: z.string().trim().max(40).optional(),
+                customization: z.string().max(1200).optional(),
+                role: z.string().trim().min(1).max(80),
+                mandate: z.string().trim().min(1).max(10000),
+              })
+              .strict(),
+          )
+          .min(1)
+          .max(100),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide valid project details and team assignments.' },
+        400,
+      );
+    try {
+      return c.json(platform.workspace.createOfficeProject(data.data), 201);
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/office/projects/:id/team', async (c) => {
+    const data = z
+      .object({
+        dotId: z.string().min(1).optional(),
+        memberTemplateId: z.string().min(1).optional(),
+        name: z.string().trim().max(40).optional(),
+        customization: z.string().max(1200).optional(),
+        role: z.string().trim().min(1).max(80),
+        mandate: z.string().trim().min(1).max(10000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid project collaborator.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.addOfficeProjectMember(c.req.param('id'), data.data),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/master-sessions', async (c) => {
+    const data = z
+      .object({
+        spaceId: z.string().min(1),
+        ...masterSessionSchema.shape,
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a Space, name, and description.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.createMasterSession(
+          data.data.spaceId,
+          data.data.name,
+          data.data.description,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/master-sessions/:id', (c) => {
+    const masterSession = platform.workspace.masterSession(c.req.param('id'));
+    if (!masterSession)
+      return c.json({ error: 'Master Session not found.' }, 404);
+    return c.json({
+      ...masterSession,
+      agents: platform.workspace.sessionAgents(masterSession.id),
+    });
+  });
+  app.patch('/master-sessions/:id', async (c) => {
+    const data = z
+      .object({
+        name: z.string().trim().min(1).max(120).optional(),
+        description: z.string().max(4000).optional(),
+      })
+      .strict()
+      .refine((value) => Object.keys(value).length > 0)
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide valid Master Session metadata.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.updateMasterSession(c.req.param('id'), data.data),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put('/master-sessions/:id/status', async (c) => {
+    const data = z
+      .object({ status: z.enum(['active', 'paused', 'archived']) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid Master Session status.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.setMasterSessionStatus(
+          c.req.param('id'),
+          data.data.status,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/master-sessions/:id/agents', (c) => {
+    try {
+      return c.json(platform.workspace.sessionAgents(c.req.param('id')));
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/master-sessions/:id/agents', async (c) => {
+    const data = sessionAgentSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!data.success)
+      return c.json({ error: 'Provide a Dot, role, and mandate.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.addSessionAgent(
+          c.req.param('id'),
+          data.data.dotId,
+          data.data.role,
+          data.data.mandate,
+          data.data.displayName ?? null,
+          data.data.soulOverride,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/master-sessions/:id/agents/:agentId', (c) => {
+    const agent = platform.workspace.sessionAgent(c.req.param('agentId'));
+    if (!agent || agent.masterSessionId !== c.req.param('id'))
+      return c.json({ error: 'Session Agent not found.' }, 404);
+    return c.json(agent);
+  });
+  app.put('/master-sessions/:id/agents/:agentId', async (c) => {
+    const data = z
+      .object({
+        role: z.string().trim().min(1).max(80).optional(),
+        displayName: z.string().trim().max(80).nullable().optional(),
+        mandate: z.string().trim().min(1).max(10000).optional(),
+        soulOverride: z.string().max(10000).optional(),
+      })
+      .strict()
+      .refine((value) => Object.keys(value).length > 0)
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide valid Session Agent settings.' }, 400);
+    const agent = platform.workspace.sessionAgent(c.req.param('agentId'));
+    if (!agent || agent.masterSessionId !== c.req.param('id'))
+      return c.json({ error: 'Session Agent not found.' }, 404);
+    try {
+      return c.json(platform.workspace.updateSessionAgent(agent.id, data.data));
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put('/master-sessions/:id/agents/:agentId/status', async (c) => {
+    const data = z
+      .object({ status: z.enum(['active', 'paused', 'removed']) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid Session Agent status.' }, 400);
+    const agent = platform.workspace.sessionAgent(c.req.param('agentId'));
+    if (!agent || agent.masterSessionId !== c.req.param('id'))
+      return c.json({ error: 'Session Agent not found.' }, 404);
+    try {
+      return c.json(
+        platform.workspace.setSessionAgentStatus(agent.id, data.data.status),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/master-sessions/:id/agents/:agentId/threads', (c) => {
+    const agent = platform.workspace.sessionAgent(c.req.param('agentId'));
+    if (!agent || agent.masterSessionId !== c.req.param('id'))
+      return c.json({ error: 'Session Agent not found.' }, 404);
+    try {
+      return c.json(platform.workspace.sessionThreads(agent.id));
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/master-sessions/:id/agents/:agentId/threads', async (c) => {
+    const data = z
+      .object({
+        threadId: z.string().min(1),
+        isPrimary: z.boolean().default(false),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a native thread and primary flag.' },
+        400,
+      );
+    const agent = platform.workspace.sessionAgent(c.req.param('agentId'));
+    if (!agent || agent.masterSessionId !== c.req.param('id'))
+      return c.json({ error: 'Session Agent not found.' }, 404);
+    try {
+      return c.json(
+        platform.workspace.associateSessionThread(
+          agent.id,
+          data.data.threadId,
+          data.data.isPrimary,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  const conversationCreateSchema = z
+    .object({
+      title: z.string().trim().min(1).max(160),
+      kind: z.enum(['direct', 'group', 'plenary', 'agent_only']),
+      visibility: z.enum(['private', 'restricted', 'team']),
+      participantIds: conversationParticipantIdsSchema.default([]),
+    })
+    .strict();
+  const conversationMessageSchema = z
+    .object({
+      content: z.string().trim().min(1).max(20000),
+      contentType: z.enum(['text', 'json']).default('text'),
+      visibility: z
+        .enum(['conversation', 'participants'])
+        .default('conversation'),
+      idempotencyKey: z.string().trim().min(1).max(200).optional(),
+    })
+    .strict();
+  app.get('/master-sessions/:id/conversations', (c) => {
+    try {
+      return c.json(
+        platform.workspace.listConversationsForOwner(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/master-sessions/:id/conversations', async (c) => {
+    const data = conversationCreateSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!data.success)
+      return c.json({ error: 'Provide valid conversation settings.' }, 400);
+    if (data.data.kind === 'agent_only')
+      return c.json(
+        { error: 'Agent-only conversations require an internal creator.' },
+        403,
+      );
+    try {
+      const session = platform.workspace.masterSession(c.req.param('id'));
+      if (!session) return c.json({ error: 'Master Session not found.' }, 404);
+      const ids = new Set(data.data.participantIds);
+      if (data.data.kind === 'plenary') {
+        for (const agent of platform.workspace.sessionAgents(session.id))
+          if (agent.status === 'active') ids.add(agent.id);
+      }
+      const participants = [...ids].map((participantId) => ({
+        participantType: 'session_agent' as const,
+        participantId,
+        role: 'participant' as const,
+      }));
+      return c.json(
+        platform.workspace.createOrganizationalConversation({
+          masterSessionId: session.id,
+          title: data.data.title,
+          kind: data.data.kind,
+          visibility: data.data.visibility,
+          createdByType: 'user',
+          createdById: platform.workspace.ownerId,
+          participants: [
+            ...participants,
+            {
+              participantType: 'user' as const,
+              participantId: platform.workspace.ownerId,
+              role: 'participant' as const,
+            },
+          ],
+        }),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/organizational-conversations/:id', (c) => {
+    try {
+      platform.workspace.organizationalConversationForParticipant(
+        c.req.param('id'),
+        'user',
+        platform.workspace.ownerId,
+      );
+      return c.json({
+        conversation: platform.workspace.organizationalConversation(
+          c.req.param('id'),
+        ),
+        participants: platform.workspace.listConversationParticipants(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+        ),
+        threads: platform.workspace.listConversationThreadsForParticipant(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+        ),
+      });
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/organizational-conversations/:id/participants', (c) => {
+    try {
+      return c.json(
+        platform.workspace.listConversationParticipants(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/organizational-conversations/:id/participants', async (c) => {
+    const data = z
+      .object({
+        participantType: z.literal('session_agent'),
+        participantId: z.string().min(1),
+        role: z
+          .enum(['moderator', 'participant', 'observer'])
+          .default('participant'),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a valid Session Agent participant.' },
+        400,
+      );
+    try {
+      return c.json(
+        platform.workspace.addConversationParticipant(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+          data.data.participantType,
+          data.data.participantId,
+          data.data.role,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.delete('/organizational-conversations/:id/participants/:agentId', (c) => {
+    try {
+      platform.workspace.removeConversationParticipant(
+        c.req.param('id'),
+        platform.workspace.ownerId,
+        c.req.param('agentId'),
+      );
+      return c.json({ ok: true });
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put(
+    '/organizational-conversations/:id/participants/:agentId/role',
+    async (c) => {
+      const data = z
+        .object({
+          role: z.enum(['moderator', 'participant', 'observer']),
+        })
+        .strict()
+        .safeParse(await c.req.json().catch(() => null));
+      if (!data.success)
+        return c.json({ error: 'Provide a valid participant role.' }, 400);
+      try {
+        return c.json(
+          platform.workspace.setConversationParticipantRole(
+            c.req.param('id'),
+            platform.workspace.ownerId,
+            c.req.param('agentId'),
+            data.data.role,
+          ),
+        );
+      } catch (error) {
+        return sessionError(c, error);
+      }
+    },
+  );
+  app.post('/organizational-conversations/:id/leave', (c) => {
+    try {
+      platform.workspace.leaveConversation(
+        c.req.param('id'),
+        'user',
+        platform.workspace.ownerId,
+      );
+      return c.json({ ok: true });
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/organizational-conversations/:id/rejoin', (c) => {
+    try {
+      return c.json(
+        platform.workspace.rejoinConversation(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/organizational-conversations/:id/threads', (c) => {
+    try {
+      return c.json(
+        platform.workspace.listConversationThreadsForParticipant(
+          c.req.param('id'),
+          'user',
+          platform.workspace.ownerId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/organizational-conversations/:id/threads', async (c) => {
+    const data = z
+      .object({
+        sessionAgentId: z.string().min(1),
+        threadId: z.string().min(1),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a valid Session Agent thread link.' },
+        400,
+      );
+    try {
+      return c.json(
+        platform.workspace.addConversationThread(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+          data.data.sessionAgentId,
+          data.data.threadId,
+        ),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put('/organizational-conversations/:id/owner', async (c) => {
+    const data = z
+      .object({ sessionAgentId: z.string().min(1) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid Session Agent owner.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.transferConversationOwnership(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+          data.data.sessionAgentId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.get('/organizational-conversations/:id/messages', (c) => {
+    const data = z
+      .object({
+        before: z.coerce.number().int().positive().optional(),
+        limit: z.coerce.number().int().min(1).max(100).default(50),
+      })
+      .safeParse({
+        before: c.req.query('before'),
+        limit: c.req.query('limit'),
+      });
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a valid message cursor and page size.' },
+        400,
+      );
+    try {
+      return c.json(
+        platform.workspace.listConversationMessagesForUser(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+          data.data.before,
+          data.data.limit,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/organizational-conversations/:id/messages', async (c) => {
+    const data = conversationMessageSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!data.success)
+      return c.json({ error: 'Provide a valid conversation message.' }, 400);
+    if (
+      data.data.contentType === 'json' &&
+      (() => {
+        try {
+          JSON.parse(data.data.content);
+          return false;
+        } catch {
+          return true;
+        }
+      })()
+    )
+      return c.json({ error: 'JSON message content must be valid JSON.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.appendUserConversationMessage({
+          conversationId: c.req.param('id'),
+          userId: platform.workspace.ownerId,
+          ...data.data,
+        }),
+        201,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.put('/organizational-conversations/:id/status', async (c) => {
+    const data = z
+      .object({ status: z.enum(['closed', 'archived']) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Provide a valid conversation status.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.closeOrganizationalConversation(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+          data.data.status,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
   app.get('/search', (c) => {
     const parsed = z
       .object({

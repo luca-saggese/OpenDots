@@ -9,6 +9,7 @@ import {
   ArrowUpRight,
   Bell,
   BookOpen,
+  BriefcaseBusiness,
   Clock3,
   Code2,
   Folder,
@@ -50,6 +51,7 @@ import { TaskRow } from './TaskPresentation';
 import { TaskActions } from './TaskActions';
 import { WorkspaceDialog, type Dialog } from './WorkspaceDialog';
 import { submitComposerOnEnter } from './chat-composer';
+import { Office } from './Office';
 
 function describeFailure(error: unknown, fallback: string) {
   return {
@@ -65,7 +67,7 @@ export function App() {
   const [selectedDot, setSelectedDot] = useState('');
   const [selectedThread, setSelectedThread] = useState<string>();
   const [view, rawSetView] = useState<
-    'chat' | 'tasks' | 'memories' | 'space' | 'inbox'
+    'chat' | 'tasks' | 'memories' | 'space' | 'inbox' | 'office'
   >('chat');
   const dirtyPage = useRef(false);
   const [spaceId, setSpaceId] = useState('');
@@ -357,6 +359,9 @@ export function App() {
         <button aria-label="Open inbox" onClick={() => setView('inbox')}>
           <Bell size={18} />
         </button>
+        <button aria-label="Open My Office" onClick={() => setView('office')}>
+          <BriefcaseBusiness size={18} />
+        </button>
         <button
           className="rail-settings"
           aria-label="Open settings"
@@ -490,6 +495,16 @@ export function App() {
         )}
         <div className="sidebar-bottom">
           <button
+            className={`nav-item ${view === 'office' ? 'active' : ''}`}
+            onClick={() => {
+              setView('office');
+              setMobile(false);
+            }}
+          >
+            <BriefcaseBusiness size={17} />
+            <span>My Office</span>
+          </button>
+          <button
             className={`nav-item ${view === 'inbox' ? 'active' : ''}`}
             onClick={() => {
               setView('inbox');
@@ -563,7 +578,9 @@ export function App() {
             <span>
               {view === 'space'
                 ? workspace.spaces.find((space) => space.id === spaceId)?.name
-                : 'Dots'}
+                : view === 'office'
+                  ? 'My Office'
+                  : 'Dots'}
             </span>
             <span>/</span>
             <strong>
@@ -575,7 +592,9 @@ export function App() {
                     ? 'Inbox'
                     : view === 'space'
                       ? 'Pages'
-                      : 'Memories'}
+                      : view === 'office'
+                        ? 'My Office'
+                        : 'Memories'}
             </strong>
           </div>
           <div className="top-actions">
@@ -811,6 +830,8 @@ export function App() {
               />
             )}
           </div>
+        ) : view === 'office' ? (
+          <Office workspace={workspace} onRefresh={refresh} />
         ) : (
           <main className="main-content">
             <div className="page-heading">

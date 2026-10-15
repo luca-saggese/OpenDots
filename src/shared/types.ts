@@ -128,6 +128,125 @@ export interface Conversation {
   /** Frozen at creation; null means this conversation does not participate. */
   learningContainerId?: string | null;
 }
+export type MasterSessionStatus = 'active' | 'paused' | 'archived';
+export interface MasterSession {
+  id: string;
+  spaceId: string;
+  name: string;
+  description: string;
+  status: MasterSessionStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+export type SessionAgentStatus = 'active' | 'paused' | 'removed';
+export interface SessionAgent {
+  id: string;
+  masterSessionId: string;
+  dotId: string;
+  role: string;
+  displayName: string | null;
+  status: SessionAgentStatus;
+  mandate: string;
+  soulOverride: string;
+  createdAt: number;
+  updatedAt: number;
+}
+export interface MemberTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  skills: string[];
+  agentInstructions: string;
+  soulInstructions: string;
+  version: number;
+}
+export interface TeamTemplatePosition {
+  id: string;
+  role: string;
+  responsibility: string;
+  memberTemplateId: string;
+  count: number;
+}
+export interface TeamTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string[];
+  version: number;
+  positions: TeamTemplatePosition[];
+}
+export interface DotProfile {
+  dotId: string;
+  summary: string;
+  skills: string[];
+  workStyle: string;
+  memberTemplateId: string | null;
+  soulInstructions: string;
+  updatedAt: number;
+}
+export interface SessionThread {
+  id: string;
+  sessionAgentId: string;
+  threadId: string;
+  isPrimary: boolean;
+  createdAt: number;
+}
+export type OrganizationalConversationKind =
+  'direct' | 'group' | 'plenary' | 'agent_only';
+export type OrganizationalConversationVisibility =
+  'private' | 'restricted' | 'team';
+export type OrganizationalConversationStatus = 'active' | 'closed' | 'archived';
+export type ConversationParticipantType = 'user' | 'session_agent';
+export type ConversationParticipantRole =
+  'owner' | 'moderator' | 'participant' | 'observer';
+export type ConversationParticipantStatus = 'active' | 'left' | 'removed';
+export interface OrganizationalConversation {
+  id: string;
+  masterSessionId: string;
+  title: string;
+  kind: OrganizationalConversationKind;
+  visibility: OrganizationalConversationVisibility;
+  status: OrganizationalConversationStatus;
+  createdByType: ConversationParticipantType;
+  createdById: string;
+  createdAt: number;
+  updatedAt: number;
+}
+export interface ConversationParticipant {
+  id: string;
+  conversationId: string;
+  participantType: ConversationParticipantType;
+  participantId: string;
+  role: ConversationParticipantRole;
+  joinedAt: number;
+  joinedAfterSequence: number;
+  leftAt: number | null;
+  leftAfterSequence: number | null;
+  status: ConversationParticipantStatus;
+}
+export interface OrganizationalMessage {
+  id: string;
+  conversationId: string;
+  sequenceNumber: number;
+  senderType: ConversationParticipantType;
+  senderId: string;
+  content: string;
+  contentType: 'text' | 'json';
+  createdAt: number;
+  visibility: 'conversation' | 'participants';
+  sourceThreadId: string | null;
+  sourceTurnId: string | null;
+  idempotencyKey: string | null;
+}
+export interface ConversationThreadLink {
+  conversationId: string;
+  sessionAgentId: string;
+  threadId: string;
+  linkedAt: number;
+}
 export interface CallReceipt {
   anchorMessageId?: string | null;
   id: string;
@@ -152,6 +271,7 @@ export interface WorkspaceState {
   spaces: Space[];
   dots: Dot[];
   conversations: Conversation[];
+  masterSessions?: MasterSession[];
   setup: SetupStatus;
   calls: CallReceipt[];
 }
