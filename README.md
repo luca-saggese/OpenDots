@@ -206,6 +206,7 @@ CopilotKit SDK telemetry collects usage metadata separately from conversation pe
 | Memory                     | User-managed preferences that permitted Dots can use                                                                                                               |
 | Automatic Learning         | Per-Dot Learning containers, conversation evidence routing, and published-skill delivery; see [setup](docs/SETUP.md#automatic-learning)                            |
 | Deployment                 | Local Node setup and separate application/browser containers                                                                                                       |
+| Navigation                 | Global command palette (Ctrl/⌘ K) with ranked cross-Space search over pages, Spaces, and Dots, plus keyboard-first commands                                         |
 
 Scheduled tasks run in their original conversation. If a worker stops or its lease expires during a run, OpenDots marks that run **Interrupted** and waits for an explicit retry. Review its pages and computer actions, then use **Retry after review** when appropriate. Completed effects may already be present even when a run has no final result.
 
