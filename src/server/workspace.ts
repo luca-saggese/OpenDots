@@ -1113,6 +1113,75 @@ export class WorkspaceStore {
       )
       .all(masterSessionId, userId) as unknown as OrganizationalConversation[];
   }
+  conversationSummariesForOwner(masterSessionId: string, userId: string) {
+    const conversations = this.listConversationsForOwner(
+      masterSessionId,
+      userId,
+    ).filter((conversation) => conversation.kind !== 'agent_only');
+    return conversations.map((conversation) => ({
+      conversation,
+      participants: this.listConversationParticipants(
+        conversation.id,
+        'user',
+        userId,
+      ).flatMap((participant) => {
+        if (participant.participantType !== 'session_agent')
+          return [{ ...participant, name: 'You', summary: '' }];
+        const agent = this.sessionAgent(participant.participantId);
+        const dot = agent && this.dot(agent.dotId);
+        if (!agent || !dot) return [];
+        return [
+          {
+            ...participant,
+            name: agent.displayName ?? dot.name,
+            summary: this.dotProfile(dot.id).summary,
+          },
+        ];
+      }),
+      lastMessage:
+        this.listConversationMessagesForUser(
+          conversation.id,
+          userId,
+          undefined,
+          1,
+        )[0] ?? null,
+    }));
+  }
+  openDirectConversationForOwner(
+    masterSessionId: string,
+    userId: string,
+    sessionAgentId: string,
+  ) {
+    if (userId !== this.ownerId) throw new Error('Conversation access denied.');
+    const master = this.requireMasterSession(masterSessionId);
+    if (master.status !== 'active')
+      throw new Error('Conversations require an active Master Session.');
+    if (!this.activeSessionAgent(sessionAgentId, masterSessionId))
+      throw new Error('Session Agent is not authorized for this project.');
+    const existing = this.db
+      .prepare(
+        `SELECT c.id FROM session_conversations c
+      JOIN conversation_participants u ON u.conversationId=c.id AND u.participantType='user' AND u.participantId=? AND u.status='active'
+      JOIN conversation_participants a ON a.conversationId=c.id AND a.participantType='session_agent' AND a.participantId=? AND a.status='active'
+      WHERE c.masterSessionId=? AND c.kind='direct' AND c.visibility='private' AND c.status='active'
+      ORDER BY c.updatedAt DESC LIMIT 1`,
+      )
+      .get(userId, sessionAgentId, masterSessionId) as
+      { id: string } | undefined;
+    if (existing) return this.requireOrganizationalConversation(existing.id);
+    return this.createOrganizationalConversation({
+      masterSessionId,
+      title: `Conversation with ${this.sessionAgent(sessionAgentId)?.displayName ?? this.dot(this.sessionAgent(sessionAgentId)!.dotId)?.name ?? 'collaborator'}`,
+      kind: 'direct',
+      visibility: 'private',
+      createdByType: 'user',
+      createdById: userId,
+      participants: [
+        { participantType: 'user', participantId: userId },
+        { participantType: 'session_agent', participantId: sessionAgentId },
+      ],
+    });
+  }
   private requireOrganizationalConversation(
     id: string,
   ): OrganizationalConversation {

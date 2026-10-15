@@ -20,6 +20,7 @@ import type {
   WorkspaceState,
 } from '../shared/types';
 import { api } from './api';
+import { ProjectConversations } from './ProjectConversations';
 
 type RosterItem = {
   dot: Dot;
@@ -56,9 +57,11 @@ const makeSlot = (position?: TeamTemplatePosition): Slot => ({
 export function Office({
   workspace,
   onRefresh,
+  onChatDot,
 }: {
   workspace: WorkspaceState;
   onRefresh: () => Promise<void>;
+  onChatDot: (dotId: string) => void;
 }) {
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [members, setMembers] = useState<MemberTemplate[]>([]);
@@ -72,6 +75,9 @@ export function Office({
     workStyle: string;
   }>();
   const [project, setProject] = useState<MasterSession>();
+  const [projectTab, setProjectTab] = useState<
+    'overview' | 'team' | 'conversations' | 'activity'
+  >('overview');
   const [projectAgents, setProjectAgents] = useState<SessionAgent[]>([]);
   const [showWizard, setShowWizard] = useState(false);
   const [step, setStep] = useState(1);
@@ -150,6 +156,7 @@ export function Office({
       ]);
       setProject(details);
       setProjectAgents(agents);
+      setProjectTab('overview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open project.');
     }
@@ -222,6 +229,7 @@ export function Office({
       setShowWizard(false);
       setProject(result.masterSession);
       setProjectAgents(result.agents);
+      setProjectTab('overview');
     } catch (err) {
       setError(
         err instanceof Error
@@ -353,183 +361,266 @@ export function Office({
       )}
       {project ? (
         <section className="office-project">
-          <div className="office-section-head">
-            <div>
-              <span className="eyebrow">PROJECT TEAM</span>
-              <h2>Assigned collaborators</h2>
-            </div>
-            <span className={`project-status ${project.status}`}>
-              {project.status}
-            </span>
-          </div>
-          <div className="office-roster-grid">
-            {projectAgents.map((agent) => {
-              const person = roster.find((item) => item.dot.id === agent.dotId);
-              return (
-                <article className="office-card" key={agent.id}>
-                  <div className="office-card-title">
-                    <span className="office-avatar">
-                      {(person?.dot.name ?? agent.displayName ?? 'D')
-                        .slice(0, 1)
-                        .toUpperCase()}
-                    </span>
-                    <div>
-                      <h3>
-                        {person?.dot.name ??
-                          agent.displayName ??
-                          'Collaborator'}
-                      </h3>
-                      <small>{agent.role}</small>
-                    </div>
-                  </div>
-                  <p>
-                    {person?.profile.summary ||
-                      person?.dot.instructions.slice(0, 180) ||
-                      'Profile summary not set.'}
-                  </p>
-                  <div className="office-skills">
-                    {person?.profile.skills.slice(0, 5).map((skill) => (
-                      <span key={skill}>{skill}</span>
-                    ))}
-                  </div>
-                  <p className="office-mandate">
-                    <b>Project mandate</b>
-                    {agent.mandate}
-                  </p>
+          <nav className="project-tabs" aria-label="Project sections">
+            {(['overview', 'team', 'conversations', 'activity'] as const).map(
+              (tab) => (
+                <button
+                  key={tab}
+                  className={projectTab === tab ? 'active' : ''}
+                  aria-current={projectTab === tab ? 'page' : undefined}
+                  onClick={() => setProjectTab(tab)}
+                >
+                  {tab}
+                </button>
+              ),
+            )}
+          </nav>
+          {projectTab === 'overview' && (
+            <section className="project-overview">
+              <div className="office-section-head">
+                <div>
+                  <span className="eyebrow">PROJECT OVERVIEW</span>
+                  <h2>{project.name}</h2>
+                </div>
+                <span className={`project-status ${project.status}`}>
+                  {project.status}
+                </span>
+              </div>
+              <p>
+                {project.description ||
+                  'No project description has been added.'}
+              </p>
+              <div className="project-overview-stats">
+                <article>
+                  <b>{projectAgents.length}</b>
+                  <span>Assigned collaborators</span>
+                </article>
+                <article>
+                  <b>
+                    {
+                      projectAgents.filter((agent) => agent.status === 'active')
+                        .length
+                    }
+                  </b>
+                  <span>Active Session Agents</span>
+                </article>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => setProjectTab('team')}
+              >
+                View project team <ChevronRight size={14} />
+              </button>
+            </section>
+          )}
+          {projectTab === 'team' && (
+            <>
+              <div className="office-section-head">
+                <div>
+                  <span className="eyebrow">PROJECT TEAM</span>
+                  <h2>Assigned collaborators</h2>
+                </div>
+                <span className={`project-status ${project.status}`}>
+                  {project.status}
+                </span>
+              </div>
+              <div className="office-roster-grid">
+                {projectAgents.map((agent) => {
+                  const person = roster.find(
+                    (item) => item.dot.id === agent.dotId,
+                  );
+                  return (
+                    <article className="office-card" key={agent.id}>
+                      <div className="office-card-title">
+                        <span className="office-avatar">
+                          {(person?.dot.name ?? agent.displayName ?? 'D')
+                            .slice(0, 1)
+                            .toUpperCase()}
+                        </span>
+                        <div>
+                          <h3>
+                            {person?.dot.name ??
+                              agent.displayName ??
+                              'Collaborator'}
+                          </h3>
+                          <small>
+                            {agent.role} · {agent.status}
+                          </small>
+                        </div>
+                      </div>
+                      <p>
+                        {person?.profile.summary ||
+                          person?.dot.instructions.slice(0, 180) ||
+                          'Profile summary not set.'}
+                      </p>
+                      <div className="office-skills">
+                        {person?.profile.skills.slice(0, 5).map((skill) => (
+                          <span key={skill}>{skill}</span>
+                        ))}
+                      </div>
+                      <p className="office-mandate">
+                        <b>Project mandate</b>
+                        {agent.mandate}
+                      </p>
+                      <button
+                        className="secondary-button"
+                        onClick={() => onChatDot(agent.dotId)}
+                      >
+                        Chat with this Dot
+                      </button>
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setSelectedDot(agent.dotId);
+                          if (person)
+                            setProfileDraft({
+                              summary: person.profile.summary,
+                              skills: person.profile.skills.join(', '),
+                              workStyle: person.profile.workStyle,
+                            });
+                          setProject(undefined);
+                        }}
+                      >
+                        Open collaborator profile <ChevronRight size={14} />
+                      </button>
+                    </article>
+                  );
+                })}
+              </div>
+              <section className="office-add-member">
+                <h3>Add an existing collaborator</h3>
+                <p>
+                  Reuse a permanent Dot with a role and mandate for this
+                  project.
+                </p>
+                <div className="office-add-row">
+                  <select
+                    aria-label="Choose collaborator"
+                    value={selectedExisting}
+                    onChange={(e) => setSelectedExisting(e.target.value)}
+                  >
+                    <option value="">Choose a Dot…</option>
+                    {roster
+                      .filter(
+                        (item) =>
+                          !projectAgents.some(
+                            (agent) => agent.dotId === item.dot.id,
+                          ),
+                      )
+                      .map((item) => (
+                        <option value={item.dot.id} key={item.dot.id}>
+                          {item.dot.name}
+                        </option>
+                      ))}
+                  </select>
+                  <input
+                    aria-label="Project role"
+                    placeholder="Project role"
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                  />
+                  <input
+                    aria-label="Project mandate"
+                    placeholder="Project mandate"
+                    value={newMandate}
+                    onChange={(e) => setNewMandate(e.target.value)}
+                  />
                   <button
-                    className="text-button"
-                    onClick={() => {
-                      setSelectedDot(agent.dotId);
-                      if (person)
-                        setProfileDraft({
-                          summary: person.profile.summary,
-                          skills: person.profile.skills.join(', '),
-                          workStyle: person.profile.workStyle,
-                        });
-                      setProject(undefined);
+                    className="primary"
+                    disabled={
+                      addingAgent ||
+                      !selectedExisting ||
+                      !newRole.trim() ||
+                      !newMandate.trim()
+                    }
+                    onClick={() => void addExistingToProject()}
+                  >
+                    {addingAgent ? 'Adding…' : 'Add to project'}
+                  </button>
+                </div>
+              </section>
+              <section className="office-add-member">
+                <h3>Hire a new collaborator</h3>
+                <p>
+                  Choose any archetype from the global catalog. The Dot and
+                  assignment are created together.
+                </p>
+                <div className="office-add-row">
+                  <select
+                    aria-label="Choose member archetype"
+                    value={projectMemberTemplate}
+                    onChange={(e) => {
+                      setProjectMemberTemplate(e.target.value);
+                      setProjectMemberName(
+                        members.find((item) => item.id === e.target.value)
+                          ?.name ?? '',
+                      );
                     }}
                   >
-                    Open collaborator profile <ChevronRight size={14} />
+                    <option value="">Choose any archetype…</option>
+                    {members.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} · {item.category}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label="New collaborator name"
+                    placeholder="Collaborator name"
+                    value={projectMemberName}
+                    onChange={(e) => setProjectMemberName(e.target.value)}
+                  />
+                  <input
+                    aria-label="Project role for new collaborator"
+                    placeholder="Project role"
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value)}
+                  />
+                  <input
+                    aria-label="Project mandate for new collaborator"
+                    placeholder="Project mandate"
+                    value={newMandate}
+                    onChange={(e) => setNewMandate(e.target.value)}
+                  />
+                  <textarea
+                    aria-label="Permanent Dot customization"
+                    placeholder="Optional permanent AGENT/SOUL customization"
+                    value={projectMemberCustomization}
+                    onChange={(e) =>
+                      setProjectMemberCustomization(e.target.value)
+                    }
+                  />
+                  <button
+                    className="primary"
+                    disabled={
+                      addingAgent ||
+                      !projectMemberTemplate ||
+                      !projectMemberName.trim() ||
+                      !newRole.trim() ||
+                      !newMandate.trim()
+                    }
+                    onClick={() => void addNewToProject()}
+                  >
+                    {addingAgent ? 'Adding…' : 'Create and assign'}
                   </button>
-                </article>
-              );
-            })}
-          </div>
-          <section className="office-add-member">
-            <h3>Add an existing collaborator</h3>
-            <p>
-              Reuse a permanent Dot with a role and mandate for this project.
-            </p>
-            <div className="office-add-row">
-              <select
-                aria-label="Choose collaborator"
-                value={selectedExisting}
-                onChange={(e) => setSelectedExisting(e.target.value)}
-              >
-                <option value="">Choose a Dot…</option>
-                {roster
-                  .filter(
-                    (item) =>
-                      !projectAgents.some(
-                        (agent) => agent.dotId === item.dot.id,
-                      ),
-                  )
-                  .map((item) => (
-                    <option value={item.dot.id} key={item.dot.id}>
-                      {item.dot.name}
-                    </option>
-                  ))}
-              </select>
-              <input
-                aria-label="Project role"
-                placeholder="Project role"
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-              />
-              <input
-                aria-label="Project mandate"
-                placeholder="Project mandate"
-                value={newMandate}
-                onChange={(e) => setNewMandate(e.target.value)}
-              />
-              <button
-                className="primary"
-                disabled={
-                  addingAgent ||
-                  !selectedExisting ||
-                  !newRole.trim() ||
-                  !newMandate.trim()
-                }
-                onClick={() => void addExistingToProject()}
-              >
-                {addingAgent ? 'Adding…' : 'Add to project'}
-              </button>
+                </div>
+              </section>
+            </>
+          )}
+          {projectTab === 'conversations' && (
+            <ProjectConversations
+              masterSessionId={project.id}
+              agents={projectAgents}
+              roster={roster}
+              onChatDot={onChatDot}
+            />
+          )}
+          {projectTab === 'activity' && (
+            <div className="large-empty">
+              <h2>Project activity</h2>
+              <p>No project activity log is available yet.</p>
             </div>
-          </section>
-          <section className="office-add-member">
-            <h3>Hire a new collaborator</h3>
-            <p>
-              Choose any archetype from the global catalog. The Dot and
-              assignment are created together.
-            </p>
-            <div className="office-add-row">
-              <select
-                aria-label="Choose member archetype"
-                value={projectMemberTemplate}
-                onChange={(e) => {
-                  setProjectMemberTemplate(e.target.value);
-                  setProjectMemberName(
-                    members.find((item) => item.id === e.target.value)?.name ??
-                      '',
-                  );
-                }}
-              >
-                <option value="">Choose any archetype…</option>
-                {members.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {item.category}
-                  </option>
-                ))}
-              </select>
-              <input
-                aria-label="New collaborator name"
-                placeholder="Collaborator name"
-                value={projectMemberName}
-                onChange={(e) => setProjectMemberName(e.target.value)}
-              />
-              <input
-                aria-label="Project role for new collaborator"
-                placeholder="Project role"
-                value={newRole}
-                onChange={(e) => setNewRole(e.target.value)}
-              />
-              <input
-                aria-label="Project mandate for new collaborator"
-                placeholder="Project mandate"
-                value={newMandate}
-                onChange={(e) => setNewMandate(e.target.value)}
-              />
-              <textarea
-                aria-label="Permanent Dot customization"
-                placeholder="Optional permanent AGENT/SOUL customization"
-                value={projectMemberCustomization}
-                onChange={(e) => setProjectMemberCustomization(e.target.value)}
-              />
-              <button
-                className="primary"
-                disabled={
-                  addingAgent ||
-                  !projectMemberTemplate ||
-                  !projectMemberName.trim() ||
-                  !newRole.trim() ||
-                  !newMandate.trim()
-                }
-                onClick={() => void addNewToProject()}
-              >
-                {addingAgent ? 'Adding…' : 'Create and assign'}
-              </button>
-            </div>
-          </section>
+          )}
         </section>
       ) : (
         <>

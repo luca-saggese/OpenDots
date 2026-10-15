@@ -266,6 +266,30 @@ export function App() {
       setBusy(false);
     }
   };
+  const startDotChat = async (dotId: string) => {
+    const target = workspace?.dots.find((item) => item.id === dotId);
+    if (!target || !configured || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const next = await api<Conversation>('/conversations', 'POST', {
+        dotId: target.id,
+        title: 'Project conversation',
+      });
+      await refresh();
+      setSelectedDot(target.id);
+      setSelectedThread(next.id);
+      setPendingPrompt(undefined);
+      setView('chat');
+      setMobile(false);
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : 'Could not open this Dot chat.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
   if (needsAuth)
     return (
       <main className="unlock">
@@ -831,7 +855,11 @@ export function App() {
             )}
           </div>
         ) : view === 'office' ? (
-          <Office workspace={workspace} onRefresh={refresh} />
+          <Office
+            workspace={workspace}
+            onRefresh={refresh}
+            onChatDot={(id) => void startDotChat(id)}
+          />
         ) : (
           <main className="main-content">
             <div className="page-heading">

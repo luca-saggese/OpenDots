@@ -430,6 +430,38 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       return sessionError(c, error);
     }
   });
+  app.get('/master-sessions/:id/conversation-summaries', (c) => {
+    try {
+      return c.json(
+        platform.workspace.conversationSummariesForOwner(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/master-sessions/:id/conversations/direct', async (c) => {
+    const data = z
+      .object({ sessionAgentId: z.string().min(1) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json({ error: 'Choose a valid project collaborator.' }, 400);
+    try {
+      return c.json(
+        platform.workspace.openDirectConversationForOwner(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+          data.data.sessionAgentId,
+        ),
+        200,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
   app.post('/master-sessions/:id/conversations', async (c) => {
     const data = conversationCreateSchema.safeParse(
       await c.req.json().catch(() => null),

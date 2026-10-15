@@ -149,6 +149,59 @@ it('creates private, group, plenary, and agent-only conversations with explicit 
   ).toBeDefined();
 });
 
+it('lists ACL-filtered summaries and opens the same private project conversation idempotently', async () => {
+  const { app, workspace, master, agents } = fixture();
+  const otherSpace = workspace.createSpace(
+    'Other project',
+    'Separate project.',
+  );
+  const otherMaster = workspace.createMasterSession(
+    otherSpace.id,
+    'Other project',
+  );
+  const open = () =>
+    app.request(
+      `/api/master-sessions/${master.id}/conversations/direct`,
+      request({ sessionAgentId: agents[0].id }),
+    );
+  const first = await open();
+  const second = await open();
+  expect(first.status).toBe(200);
+  const firstConversation = await first.json();
+  const secondConversation = await second.json();
+  expect(firstConversation.id).toBe(secondConversation.id);
+  const id = firstConversation.id;
+  expect(
+    (
+      await app.request(
+        `/api/organizational-conversations/${id}/messages`,
+        request({
+          content: 'private project update',
+          idempotencyKey: 'summary-message',
+        }),
+      )
+    ).status,
+  ).toBe(201);
+  const summaries = await app.request(
+    `/api/master-sessions/${master.id}/conversation-summaries`,
+  );
+  expect(summaries.status).toBe(200);
+  const rows = await summaries.json();
+  expect(rows).toHaveLength(1);
+  expect(rows[0].conversation.id).toBe(id);
+  expect(rows[0].lastMessage.content).toBe('private project update');
+
+  const wrongProject = await app.request(
+    `/api/master-sessions/${otherMaster.id}/conversations/direct`,
+    request({ sessionAgentId: agents[0].id }),
+  );
+  expect(wrongProject.status).toBe(400);
+  const otherRows = await app.request(
+    `/api/master-sessions/${otherMaster.id}/conversation-summaries`,
+  );
+  expect(await otherRows.json()).toEqual([]);
+});
+
 it('hides earlier messages from late joiners and preserves separate access intervals on rejoin', async () => {
   const { app, workspace, master, agents } = fixture();
   const created = await createDirect(app, master.id, agents[0].id);
