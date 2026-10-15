@@ -514,6 +514,7 @@ export class WorkspaceStore {
     const masterSessionId = randomUUID();
     const now = Date.now();
     const dotIds = new Set<string>();
+    const requestedDotIds = new Set<string>();
     for (const row of input.team) {
       if (
         !row.role.trim() ||
@@ -533,6 +534,12 @@ export class WorkspaceStore {
           throw new Error('A Dot can only have one role in this project.');
         dotIds.add(dot.id);
       } else {
+        const requestedDotId = row.id?.trim();
+        if (requestedDotId) {
+          if (this.dot(requestedDotId) || requestedDotIds.has(requestedDotId))
+            throw new Error('Dot identifier is already in use.');
+          requestedDotIds.add(requestedDotId);
+        }
         if (!this.memberTemplate(row.memberTemplateId!))
           throw new Error('Member Template not found.');
         if (
@@ -572,7 +579,7 @@ export class WorkspaceStore {
         if (!dotId) {
           const template = this.memberTemplate(row.memberTemplateId!)!;
           const customization = row.customization?.trim() ?? '';
-          dotId = randomUUID();
+          dotId = row.id?.trim() || randomUUID();
           const instructions = `${template.agentInstructions}${customization ? `\n\nPermanent owner customization:\n${customization}` : ''}`;
           this.db
             .prepare(

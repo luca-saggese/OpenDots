@@ -20,6 +20,7 @@ import type {
   WorkspaceState,
 } from '../shared/types';
 import { api } from './api';
+import { Mascot } from './Mascot';
 import { ProjectConversations } from './ProjectConversations';
 
 type RosterItem = {
@@ -41,9 +42,26 @@ type Slot = {
   dotId?: string;
   name: string;
   customization: string;
-  included: boolean;
 };
 type ProjectResult = { masterSession: MasterSession; agents: SessionAgent[] };
+const suggestedDotNames = [
+  'Aster',
+  'Milo',
+  'Nora',
+  'Orion',
+  'Cleo',
+  'Remy',
+  'Iris',
+  'Theo',
+  'Vega',
+  'Luca',
+  'Mira',
+  'Ezra',
+  'Nova',
+  'Sage',
+  'Atlas',
+  'Ada',
+];
 const makeSlot = (position?: TeamTemplatePosition): Slot => ({
   id: crypto.randomUUID(),
   role: position?.role ?? '',
@@ -51,7 +69,6 @@ const makeSlot = (position?: TeamTemplatePosition): Slot => ({
   memberTemplateId: position?.memberTemplateId ?? '',
   name: '',
   customization: '',
-  included: true,
 });
 
 export function Office({
@@ -127,15 +144,15 @@ export function Office({
   }, []);
   const chosenDot = roster.find((item) => item.dot.id === selectedDot);
   const currentTeam = teams.find((item) => item.id === teamId);
-  const projectTeamValid = slots
-    .filter((slot) => slot.included)
-    .every((slot) => !!slot.role.trim() && !!slot.mandate.trim());
-  const hiringValid = slots
-    .filter((slot) => slot.included)
-    .every((slot) =>
-      slot.dotId
-        ? roster.some((item) => item.dot.id === slot.dotId)
-        : !!slot.memberTemplateId && !!slot.name.trim(),
+  const projectTeamValid =
+    slots.length > 0 &&
+    slots.every(
+      (slot) =>
+        !!slot.role.trim() &&
+        !!slot.mandate.trim() &&
+        (slot.dotId
+          ? roster.some((item) => item.dot.id === slot.dotId)
+          : !!slot.memberTemplateId && !!slot.name.trim()),
     );
   const filteredMembers = useMemo(() => {
     const needle = catalogSearch.trim().toLocaleLowerCase();
@@ -175,9 +192,35 @@ export function Office({
   };
   const chooseTeam = (id: string) => {
     setTeamId(id);
-    setSlots(
-      (teams.find((team) => team.id === id)?.positions ?? []).map(makeSlot),
+    const positions = (
+      teams.find((team) => team.id === id)?.positions ?? []
+    ).map(makeSlot);
+    setSlots(assignSuggestedNames(positions));
+  };
+  const assignSuggestedNames = (input: Slot[]) => {
+    const used = new Set(
+      roster.map((item) => item.dot.name.trim().toLowerCase()),
     );
+    return input.map((slot) => {
+      if (slot.dotId) return { ...slot, name: '' };
+      const currentName = slot.name.trim();
+      if (currentName && !used.has(currentName.toLowerCase())) {
+        used.add(currentName.toLowerCase());
+        return slot;
+      }
+      const availableNames = suggestedDotNames.filter(
+        (candidate) => !used.has(candidate.toLowerCase()),
+      );
+      let name =
+        availableNames[Math.floor(Math.random() * availableNames.length)];
+      if (!name) {
+        let suffix = 1;
+        while (used.has(`dot ${suffix}`)) suffix += 1;
+        name = `Dot ${suffix}`;
+      }
+      used.add(name.toLowerCase());
+      return { ...slot, name };
+    });
   };
   const updateSlot = (id: string, patch: Partial<Slot>) =>
     setSlots((current) =>
@@ -214,16 +257,18 @@ export function Office({
         creationKey,
         name: projectName,
         description,
-        team: slots
-          .filter((slot) => slot.included)
-          .map((slot) => ({
-            dotId: slot.dotId,
-            memberTemplateId: slot.memberTemplateId || undefined,
-            name: slot.name || undefined,
-            customization: slot.customization,
-            role: slot.role,
-            mandate: slot.mandate,
-          })),
+        team: slots.map((slot) => ({
+          ...(slot.dotId
+            ? { dotId: slot.dotId }
+            : {
+                id: slot.id,
+                memberTemplateId: slot.memberTemplateId,
+                name: slot.name,
+                customization: slot.customization,
+              }),
+          role: slot.role,
+          mandate: slot.mandate,
+        })),
       });
       await onRefresh();
       await refreshOffice();
@@ -314,17 +359,6 @@ export function Office({
       setAddingAgent(false);
     }
   };
-  const createSlotFromTemplate = (member: MemberTemplate) =>
-    setSlots((current) => [
-      ...current,
-      {
-        ...makeSlot(),
-        memberTemplateId: member.id,
-        role: member.name,
-        mandate: member.description,
-      },
-    ]);
-
   return (
     <main className="main-content office-page">
       <div className="office-heading">
@@ -430,20 +464,19 @@ export function Office({
                   const person = roster.find(
                     (item) => item.dot.id === agent.dotId,
                   );
+                  const name =
+                    person?.dot.name ?? agent.displayName ?? 'Collaborator';
                   return (
                     <article className="office-card" key={agent.id}>
                       <div className="office-card-title">
-                        <span className="office-avatar">
-                          {(person?.dot.name ?? agent.displayName ?? 'D')
-                            .slice(0, 1)
-                            .toUpperCase()}
-                        </span>
+                        <Mascot
+                          identity={agent.dotId}
+                          name={name}
+                          small
+                          decorative
+                        />
                         <div>
-                          <h3>
-                            {person?.dot.name ??
-                              agent.displayName ??
-                              'Collaborator'}
-                          </h3>
+                          <h3>{name}</h3>
                           <small>
                             {agent.role} · {agent.status}
                           </small>
@@ -645,9 +678,12 @@ export function Office({
               {roster.map(({ dot, profile, projects }) => (
                 <article className="office-card" key={dot.id}>
                   <div className="office-card-title">
-                    <span className="office-avatar">
-                      {dot.name.slice(0, 1).toUpperCase()}
-                    </span>
+                    <Mascot
+                      identity={dot.id}
+                      name={dot.name}
+                      small
+                      decorative
+                    />
                     <div>
                       <h3>{dot.name}</h3>
                       <small>
@@ -938,9 +974,9 @@ export function Office({
             >
               <X size={18} />
             </button>
-            <span className="eyebrow">PROJECT SETUP · STEP {step} OF 4</span>
+            <span className="eyebrow">PROJECT SETUP · STEP {step} OF 3</span>
             <div className="office-steps">
-              {['Project', 'Team', 'Hiring', 'Review'].map((label, index) => (
+              {['Project', 'Team', 'Review'].map((label, index) => (
                 <span
                   className={
                     step === index + 1
@@ -998,14 +1034,17 @@ export function Office({
             {step === 2 && (
               <>
                 <h2 id="wizard-title">Shape your suggested team</h2>
-                <p>{currentTeam?.description ?? 'Build your project team.'}</p>
+                <p>
+                  {currentTeam?.description ??
+                    'Set up each project role and choose who fills it.'}
+                </p>
                 {!projectTeamValid && (
                   <p className="chat-error" role="alert">
-                    Add a role and responsibility for each included position.
+                    Add a role, responsibility, and archetype for each position.
                   </p>
                 )}
                 <div className="office-slot-list">
-                  {slots.map((slot, index) => {
+                  {slots.map((slot) => {
                     const dot = roster.find(
                       (item) => item.dot.id === slot.dotId,
                     )?.dot;
@@ -1018,37 +1057,24 @@ export function Office({
                       archetype?.name ||
                       'Dot to choose';
                     return (
-                      <article
-                        className={`office-slot ${slot.included ? '' : 'excluded'}`}
-                        key={slot.id}
-                      >
+                      <article className="office-slot" key={slot.id}>
                         <div className="office-slot-heading">
                           <div className="office-slot-person">
-                            <span
-                              className={`office-avatar office-slot-avatar office-team-avatar-${index % 4}`}
-                              aria-hidden="true"
-                            >
-                              {displayName.slice(0, 1).toUpperCase()}
-                            </span>
+                            <Mascot
+                              identity={dot?.id ?? slot.id}
+                              name={displayName}
+                              small
+                              decorative
+                            />
                             <span>
                               <b>{displayName}</b>
                               <small>
-                                {dot ? 'Existing Dot' : 'Suggested Dot'}
+                                {dot
+                                  ? 'Assigned to this project'
+                                  : 'New project Dot'}
                               </small>
                             </span>
                           </div>
-                          <label className="office-include">
-                            <input
-                              type="checkbox"
-                              checked={slot.included}
-                              onChange={(e) =>
-                                updateSlot(slot.id, {
-                                  included: e.target.checked,
-                                })
-                              }
-                            />
-                            Include position
-                          </label>
                         </div>
                         <div className="office-slot-fields">
                           <label>
@@ -1090,19 +1116,79 @@ export function Office({
                             </select>
                           </label>
                         </div>
+                        <div className="office-slot-assignment">
+                          <label>
+                            <span>Dot for this role</span>
+                            <select
+                              aria-label={`Dot for ${slot.role || 'this role'}`}
+                              value={slot.dotId ?? ''}
+                              onChange={(e) => {
+                                const dotId = e.target.value || undefined;
+                                setSlots((current) =>
+                                  assignSuggestedNames(
+                                    current.map((item) =>
+                                      item.id === slot.id
+                                        ? { ...item, dotId, name: '' }
+                                        : item,
+                                    ),
+                                  ),
+                                );
+                              }}
+                            >
+                              <option value="">
+                                Create new Dot · {slot.name}
+                              </option>
+                              {roster
+                                .filter(
+                                  (item) =>
+                                    !slots.some(
+                                      (other) =>
+                                        other.id !== slot.id &&
+                                        other.dotId === item.dot.id,
+                                    ),
+                                )
+                                .map((item) => (
+                                  <option key={item.dot.id} value={item.dot.id}>
+                                    {item.dot.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </label>
+                          {!slot.dotId && (
+                            <label>
+                              <span>
+                                Personalize {slot.name}{' '}
+                                <small>(optional)</small>
+                              </span>
+                              <textarea
+                                aria-label={`Personalization for ${slot.name}`}
+                                placeholder="Add project-specific permanent instructions"
+                                value={slot.customization}
+                                onChange={(e) =>
+                                  updateSlot(slot.id, {
+                                    customization: e.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                          )}
+                        </div>
                         <div className="office-slot-buttons">
                           <button
                             className="quiet-button"
                             onClick={() =>
-                              setSlots((current) => [
-                                ...current,
-                                {
-                                  ...slot,
-                                  id: crypto.randomUUID(),
-                                  role: `${slot.role} 2`,
-                                  name: '',
-                                },
-                              ])
+                              setSlots((current) =>
+                                assignSuggestedNames([
+                                  ...current,
+                                  {
+                                    ...slot,
+                                    id: crypto.randomUUID(),
+                                    role: `${slot.role} 2`,
+                                    name: '',
+                                    dotId: undefined,
+                                  },
+                                ]),
+                              )
                             }
                           >
                             Duplicate
@@ -1124,7 +1210,9 @@ export function Office({
                   <button
                     className="secondary-button"
                     onClick={() =>
-                      setSlots((current) => [...current, makeSlot()])
+                      setSlots((current) =>
+                        assignSuggestedNames([...current, makeSlot()]),
+                      )
                     }
                   >
                     <Plus size={15} />
@@ -1135,188 +1223,27 @@ export function Office({
             )}
             {step === 3 && (
               <>
-                <h2 id="wizard-title">Choose who fills each role</h2>
-                <p>
-                  Reuse a permanent Dot or create a new one from any
-                  professional archetype.
-                </p>
-                {!hiringValid && (
-                  <p className="chat-error" role="alert">
-                    Choose an existing Dot, or select a template and name for
-                    each included position.
-                  </p>
-                )}
-                <div className="office-slot-list">
-                  {slots
-                    .filter((slot) => slot.included)
-                    .map((slot) => (
-                      <article className="office-hire" key={slot.id}>
-                        <div>
-                          <b>{slot.role || 'Untitled role'}</b>
-                          <p>{slot.mandate}</p>
-                        </div>
-                        <div className="office-hire-choice">
-                          <label>
-                            <input
-                              type="radio"
-                              name={`hire-${slot.id}`}
-                              checked={!!slot.dotId}
-                              onChange={() =>
-                                updateSlot(slot.id, {
-                                  dotId: roster[0]?.dot.id,
-                                  memberTemplateId: '',
-                                  name: '',
-                                  customization: '',
-                                })
-                              }
-                            />
-                            Existing Dot
-                          </label>
-                          <label>
-                            <input
-                              type="radio"
-                              name={`hire-${slot.id}`}
-                              checked={!slot.dotId}
-                              onChange={() =>
-                                updateSlot(slot.id, {
-                                  dotId: undefined,
-                                  memberTemplateId:
-                                    slot.memberTemplateId || members[0]?.id,
-                                  name: '',
-                                  customization: '',
-                                })
-                              }
-                            />
-                            New Dot
-                          </label>
-                        </div>
-                        {slot.dotId ? (
-                          <>
-                            <select
-                              aria-label={`Choose Dot for ${slot.role}`}
-                              value={slot.dotId}
-                              onChange={(e) =>
-                                updateSlot(slot.id, { dotId: e.target.value })
-                              }
-                            >
-                              <option value="" disabled>
-                                Choose an existing collaborator
-                              </option>
-                              {roster
-                                .filter(
-                                  (item) =>
-                                    !slots.some(
-                                      (other) =>
-                                        other.id !== slot.id &&
-                                        other.dotId === item.dot.id,
-                                    ),
-                                )
-                                .map((item) => (
-                                  <option key={item.dot.id} value={item.dot.id}>
-                                    {item.dot.name} ·{' '}
-                                    {item.profile.summary ||
-                                      'Profile summary not set'}
-                                  </option>
-                                ))}
-                            </select>
-                            <small>
-                              Global instructions remain unchanged. The role and
-                              mandate apply to this project only.
-                            </small>
-                          </>
-                        ) : (
-                          <>
-                            <select
-                              aria-label={`Member archetype for ${slot.role}`}
-                              value={slot.memberTemplateId}
-                              onChange={(e) =>
-                                updateSlot(slot.id, {
-                                  memberTemplateId: e.target.value,
-                                  name:
-                                    members.find((m) => m.id === e.target.value)
-                                      ?.name ?? '',
-                                })
-                              }
-                            >
-                              <option value="">Choose an archetype</option>
-                              {members.map((member) => (
-                                <option key={member.id} value={member.id}>
-                                  {member.name} · {member.category}
-                                </option>
-                              ))}
-                            </select>
-                            <input
-                              aria-label={`New Dot name for ${slot.role}`}
-                              placeholder="New Dot name"
-                              value={slot.name}
-                              onChange={(e) =>
-                                updateSlot(slot.id, { name: e.target.value })
-                              }
-                            />
-                            <textarea
-                              aria-label={`Permanent customization for ${slot.role}`}
-                              placeholder="Optional permanent AGENT/SOUL customization"
-                              value={slot.customization}
-                              onChange={(e) =>
-                                updateSlot(slot.id, {
-                                  customization: e.target.value,
-                                })
-                              }
-                            />
-                          </>
-                        )}
-                      </article>
-                    ))}
-                </div>
-                <details className="office-catalog-details">
-                  <summary>
-                    <Search size={15} /> Add any archetype from the global
-                    catalog
-                  </summary>
-                  <input
-                    aria-label="Search archetypes"
-                    placeholder="Search any category"
-                    value={catalogSearch}
-                    onChange={(e) => setCatalogSearch(e.target.value)}
-                  />
-                  <div className="office-catalog-chips">
-                    {filteredMembers.map((member) => (
-                      <button
-                        key={member.id}
-                        onClick={() => createSlotFromTemplate(member)}
-                      >
-                        {member.name} <small>{member.category}</small>
-                      </button>
-                    ))}
-                  </div>
-                </details>
-              </>
-            )}
-            {step === 4 && (
-              <>
                 <h2 id="wizard-title">Review and create</h2>
                 <div className="office-review">
                   <h3>{projectName}</h3>
                   <p>{description || 'No project description.'}</p>
                   <small>Template: {currentTeam?.name ?? 'Custom team'}</small>
-                  {slots
-                    .filter((slot) => slot.included)
-                    .map((slot) => (
-                      <article key={slot.id}>
-                        <b>{slot.role}</b>
-                        <span>
-                          {slot.dotId
-                            ? `Reuse ${roster.find((item) => item.dot.id === slot.dotId)?.dot.name ?? 'existing Dot'}`
-                            : `Create ${slot.name || 'unnamed Dot'} · ${members.find((member) => member.id === slot.memberTemplateId)?.name ?? 'no template'}`}
-                        </span>
-                        <small>Mandate: {slot.mandate}</small>
-                        {slot.customization && (
-                          <small>
-                            Permanent customization: {slot.customization}
-                          </small>
-                        )}
-                      </article>
-                    ))}
+                  {slots.map((slot) => (
+                    <article key={slot.id}>
+                      <b>{slot.role}</b>
+                      <span>
+                        {slot.dotId
+                          ? `Reuse ${roster.find((item) => item.dot.id === slot.dotId)?.dot.name ?? 'existing Dot'}`
+                          : `Create ${slot.name} · ${members.find((member) => member.id === slot.memberTemplateId)?.name ?? 'no template'}`}
+                      </span>
+                      <small>Mandate: {slot.mandate}</small>
+                      {slot.customization && (
+                        <small>
+                          Permanent customization: {slot.customization}
+                        </small>
+                      )}
+                    </article>
+                  ))}
                 </div>
                 <p className="muted">
                   Confirmation creates the Space, Master Session, new Dots,
@@ -1337,14 +1264,12 @@ export function Office({
                 </button>
               )}
               <span />
-              {step < 4 ? (
+              {step < 3 ? (
                 <button
                   className="primary"
                   disabled={
                     (step === 1 && !projectName.trim()) ||
-                    (step === 2 && !projectTeamValid) ||
-                    (step === 3 &&
-                      (!slots.some((slot) => slot.included) || !hiringValid))
+                    (step === 2 && !projectTeamValid)
                   }
                   onClick={() => setStep(step + 1)}
                 >
@@ -1354,7 +1279,7 @@ export function Office({
               ) : (
                 <button
                   className="primary"
-                  disabled={saving || !slots.some((slot) => slot.included)}
+                  disabled={saving || slots.length === 0}
                   onClick={() => void confirmProject()}
                 >
                   {saving ? 'Creating…' : 'Create project'}
