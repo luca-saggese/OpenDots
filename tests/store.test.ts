@@ -112,6 +112,19 @@ describe('durable task lifecycle', () => {
     },
   );
   it('claims other queued work while an expired run waits for review', () => {
+    const { store } = fixture();
+    const interrupted = store.createTask('Create the first page');
+    const now = Date.now();
+    const old = store.claim(now)!;
+    const next = store.createTask('Research another topic');
+
+    expect(store.claim(now + 480_001)?.id).toBe(next.id);
+    expect(store.task(interrupted.id)?.status).toBe('interrupted');
+    expect(store.detail(interrupted.id)?.runs[0].status).toBe('interrupted');
+    expect(store.finish(old, { text: 'Late', sources: [], sample: true })).toBe(
+      false,
+    );
+  });
   it('persists inbox items and watcher state', () => {
     const { store } = fixture();
     const item = store.createInboxItem(
@@ -141,19 +154,6 @@ describe('durable task lifecycle', () => {
     expect(store.watchers()[0]?.lastHash).toBe('abc');
     expect(store.watcherAction(watcher.id, 'delete')).toBeUndefined();
     expect(store.watchers()).toHaveLength(0);
-  });
-    const { store } = fixture();
-    const interrupted = store.createTask('Create the first page');
-    const now = Date.now();
-    const old = store.claim(now)!;
-    const next = store.createTask('Research another topic');
-
-    expect(store.claim(now + 180_001)?.id).toBe(next.id);
-    expect(store.task(interrupted.id)?.status).toBe('interrupted');
-    expect(store.detail(interrupted.id)?.runs[0].status).toBe('interrupted');
-    expect(store.finish(old, { text: 'Late', sources: [], sample: true })).toBe(
-      false,
-    );
   });
   it('holds an expired run for review after a local page effect', () => {
     const { store, path } = fixture();

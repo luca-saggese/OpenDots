@@ -76,6 +76,7 @@ it('labels an interrupted task for owner review before retry', () => {
   expect(html).toContain('Retry after review');
   expect(html).not.toContain('Pause task');
 });
+
 it('keeps the plain Failed label and no pause control without a next run', () => {
   const failed: Task = { ...task, status: 'failed', nextRunAt: null };
   const html = renderToStaticMarkup(
