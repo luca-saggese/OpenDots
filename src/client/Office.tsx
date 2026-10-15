@@ -1005,91 +1005,122 @@ export function Office({
                   </p>
                 )}
                 <div className="office-slot-list">
-                  {slots.map((slot) => (
-                    <article
-                      className={`office-slot ${slot.included ? '' : 'excluded'}`}
-                      key={slot.id}
-                    >
-                      <label className="office-include">
-                        <input
-                          type="checkbox"
-                          checked={slot.included}
-                          onChange={(e) =>
-                            updateSlot(slot.id, { included: e.target.checked })
-                          }
-                        />
-                        Include position
-                      </label>
-                      <div className="office-slot-fields">
-                        <label>
-                          Role
-                          <input
-                            aria-label="Role name"
-                            value={slot.role}
-                            onChange={(e) =>
-                              updateSlot(slot.id, { role: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Responsibility / mandate
-                          <input
-                            aria-label="Role responsibility"
-                            value={slot.mandate}
-                            onChange={(e) =>
-                              updateSlot(slot.id, { mandate: e.target.value })
-                            }
-                          />
-                        </label>
-                        <label>
-                          Suggested archetype
-                          <select
-                            value={slot.memberTemplateId}
-                            onChange={(e) =>
-                              updateSlot(slot.id, {
-                                memberTemplateId: e.target.value,
-                              })
+                  {slots.map((slot, index) => {
+                    const dot = roster.find(
+                      (item) => item.dot.id === slot.dotId,
+                    )?.dot;
+                    const archetype = members.find(
+                      (member) => member.id === slot.memberTemplateId,
+                    );
+                    const displayName =
+                      dot?.name ||
+                      slot.name.trim() ||
+                      archetype?.name ||
+                      'Dot to choose';
+                    return (
+                      <article
+                        className={`office-slot ${slot.included ? '' : 'excluded'}`}
+                        key={slot.id}
+                      >
+                        <div className="office-slot-heading">
+                          <div className="office-slot-person">
+                            <span
+                              className={`office-avatar office-slot-avatar office-team-avatar-${index % 4}`}
+                              aria-hidden="true"
+                            >
+                              {displayName.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span>
+                              <b>{displayName}</b>
+                              <small>
+                                {dot ? 'Existing Dot' : 'Suggested Dot'}
+                              </small>
+                            </span>
+                          </div>
+                          <label className="office-include">
+                            <input
+                              type="checkbox"
+                              checked={slot.included}
+                              onChange={(e) =>
+                                updateSlot(slot.id, {
+                                  included: e.target.checked,
+                                })
+                              }
+                            />
+                            Include position
+                          </label>
+                        </div>
+                        <div className="office-slot-fields">
+                          <label>
+                            Role
+                            <input
+                              aria-label="Role name"
+                              value={slot.role}
+                              onChange={(e) =>
+                                updateSlot(slot.id, { role: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Responsibility / mandate
+                            <input
+                              aria-label="Role responsibility"
+                              value={slot.mandate}
+                              onChange={(e) =>
+                                updateSlot(slot.id, { mandate: e.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Suggested archetype
+                            <select
+                              value={slot.memberTemplateId}
+                              onChange={(e) =>
+                                updateSlot(slot.id, {
+                                  memberTemplateId: e.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Choose later</option>
+                              {members.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.name} · {member.category}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <div className="office-slot-buttons">
+                          <button
+                            className="quiet-button"
+                            onClick={() =>
+                              setSlots((current) => [
+                                ...current,
+                                {
+                                  ...slot,
+                                  id: crypto.randomUUID(),
+                                  role: `${slot.role} 2`,
+                                  name: '',
+                                },
+                              ])
                             }
                           >
-                            <option value="">Choose later</option>
-                            {members.map((member) => (
-                              <option key={member.id} value={member.id}>
-                                {member.name} · {member.category}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                      <div className="office-slot-buttons">
-                        <button
-                          className="quiet-button"
-                          onClick={() =>
-                            setSlots((current) => [
-                              ...current,
-                              {
-                                ...slot,
-                                id: crypto.randomUUID(),
-                                role: `${slot.role} 2`,
-                                name: '',
-                              },
-                            ])
-                          }
-                        >
-                          Duplicate
-                        </button>
-                        <button
-                          className="quiet-button"
-                          onClick={() =>
-                            setSlots((current) =>
-                              current.filter((item) => item.id !== slot.id),
-                            )
-                          }
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                            Duplicate
+                          </button>
+                          <button
+                            className="quiet-button"
+                            onClick={() =>
+                              setSlots((current) =>
+                                current.filter((item) => item.id !== slot.id),
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
                   <button
                     className="secondary-button"
                     onClick={() =>

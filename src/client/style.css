@@ -4533,7 +4533,8 @@ h3 {
   z-index: 30;
 }
 .office-wizard {
-  width: min(820px, 100%);
+  width: min(1120px, calc(100vw - 48px));
+  max-width: 1120px;
   max-height: min(88vh, 900px);
   overflow: auto;
 }
@@ -4572,7 +4573,73 @@ h3 {
   gap: 10px;
   margin: 16px 0;
 }
-.office-slot,
+.office-slot {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px 13px;
+  background: linear-gradient(
+    115deg,
+    color-mix(in srgb, var(--accent) 4%, var(--surface)),
+    var(--surface) 44%
+  );
+}
+.office-slot-heading,
+.office-slot-person {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.office-slot-heading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+.office-slot-person {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.office-slot-avatar {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--surface);
+  border-radius: 15px 15px 15px 7px;
+  box-shadow: 0 2px 7px color-mix(in srgb, var(--accent) 16%, transparent);
+  background: color-mix(in srgb, var(--accent) 15%, var(--surface));
+}
+.office-team-avatar-1 {
+  background: color-mix(in srgb, #dfaa58 22%, var(--surface));
+  color: #8a5c16;
+}
+.office-team-avatar-2 {
+  background: color-mix(in srgb, #68a99a 22%, var(--surface));
+  color: #347366;
+}
+.office-team-avatar-3 {
+  background: color-mix(in srgb, #b183c2 20%, var(--surface));
+  color: #765088;
+}
+.office-slot-person > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.office-slot-person b,
+.office-slot-person small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.office-slot-person b {
+  color: var(--foreground, inherit);
+  font-size: 14px;
+}
+.office-slot-person small {
+  color: var(--muted);
+  font-size: 12px;
+}
 .office-hire {
   border: 1px solid var(--border);
   border-radius: 11px;
@@ -4588,11 +4655,30 @@ h3 {
   align-items: center;
   font-size: 13px;
 }
+.office-include {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  white-space: nowrap;
+}
+.office-include input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 0;
+}
 .office-slot-fields {
   display: grid;
-  grid-template-columns: 1fr 2fr 1.3fr;
-  gap: 9px;
-  margin-top: 10px;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(240px, 1.7fr) minmax(
+      210px,
+      1.2fr
+    );
+  gap: 14px;
+  margin-top: 0;
 }
 .office-slot-fields label,
 .office-hire {
@@ -4609,7 +4695,12 @@ h3 {
   justify-content: flex-end;
 }
 .office-hire {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  min-width: 0;
+}
+.office-hire > div:first-child {
+  min-width: 0;
 }
 .office-hire > div:first-child p {
   color: var(--muted);
@@ -4617,7 +4708,26 @@ h3 {
 }
 .office-hire-choice {
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px 16px;
+  min-width: 0;
+}
+.office-hire-choice label {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.office-hire-choice input[type='radio'] {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 .office-hire > select,
 .office-hire > input,
@@ -5134,6 +5244,12 @@ h3 {
   .office-add-row,
   .office-slot-fields {
     grid-template-columns: 1fr;
+  }
+  .office-hire {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .office-hire-choice {
+    justify-content: flex-start;
   }
   .office-wizard {
     padding: 20px;
