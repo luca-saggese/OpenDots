@@ -102,7 +102,7 @@ export class WorkspaceStore {
     return space;
   }
   dots(): Dot[] {
-    return this.db
+    const rows = this.db
       .prepare('SELECT * FROM dots ORDER BY createdAt')
       .all()
       .map((row) => ({
