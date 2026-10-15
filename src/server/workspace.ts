@@ -119,6 +119,7 @@ export class WorkspaceStore {
         composioToolkits: JSON.parse(String(row.composioToolkits ?? '[]')),
         skillDeliveryEnabled: !!row.skillDeliveryEnabled,
       })) as unknown as Dot[];
+    return rows;
   }
   dot(id: string) {
     return this.dots().find((dot) => dot.id === id);

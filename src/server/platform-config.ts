@@ -73,7 +73,7 @@ export interface PlatformConfig extends WebConfig {
   slackDotId?: string;
   telegramBotToken?: string;
   telegramChannel?: string;
-  telegramUsers: string[];
+  telegramUsers?: string[];
   telegramDotId?: string;
   telegramMode?: 'polling' | 'webhook' | 'auto';
   telegramWebhookDomain?: string;
@@ -102,7 +102,7 @@ export function setupStatus(
   const declaredTelegram = !!(
     config.telegramBotToken &&
     config.telegramChannel &&
-    config.telegramUsers.length
+    (config.telegramUsers ?? []).length
   );
   slack = declaredSlack
     ? activationFailed && slack !== 'online'
@@ -117,7 +117,7 @@ export function setupStatus(
       : telegram
     : config.telegramBotToken ||
         config.telegramChannel ||
-        config.telegramUsers.length
+        (config.telegramUsers ?? []).length
       ? 'setup_required'
       : 'not_configured';
   return {

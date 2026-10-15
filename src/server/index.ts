@@ -138,10 +138,9 @@ const server = serve({ fetch: app.fetch, hostname: host, port }, (info) => {
   void platform
     .start()
     .catch((error) =>
-      reportChannelFailure(
-        'Channels activation failed; check setup status',
-        [safeFailure(error)],
-      ),
+      reportChannelFailure('Channels activation failed; check setup status', [
+        safeFailure(error),
+      ]),
     );
 });
 const shutdown = createShutdown({

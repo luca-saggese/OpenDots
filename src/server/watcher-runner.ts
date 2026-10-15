@@ -36,7 +36,9 @@ async function validatePublicUrl(value: string): Promise<URL> {
     url.username ||
     url.password
   )
-    throw new Error('Watcher URLs must be public HTTP(S) URLs without credentials.');
+    throw new Error(
+      'Watcher URLs must be public HTTP(S) URLs without credentials.',
+    );
 
   const hostname = url.hostname.toLowerCase();
   if (
@@ -50,7 +52,10 @@ async function validatePublicUrl(value: string): Promise<URL> {
     throw new Error('Watcher URL resolves to a private address.');
 
   const addresses = await lookup(hostname, { all: true });
-  if (!addresses.length || addresses.some((entry) => privateAddress(entry.address)))
+  if (
+    !addresses.length ||
+    addresses.some((entry) => privateAddress(entry.address))
+  )
     throw new Error('Watcher URL resolves to a private or local address.');
 
   return url;
@@ -95,7 +100,8 @@ async function fetchPublicBody(start: string): Promise<string> {
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
-      if (!location) throw new Error('Watcher redirect did not provide a location.');
+      if (!location)
+        throw new Error('Watcher redirect did not provide a location.');
       if (redirect === MAX_REDIRECTS)
         throw new Error('Watcher followed too many redirects.');
       current = await validatePublicUrl(new URL(location, current).toString());
@@ -143,8 +149,7 @@ export class WatcherRunner {
     try {
       for (const watcher of this.store.dueWatchers()) {
         const checkedAt = Date.now();
-        const nextCheckAt =
-          checkedAt + watcher.intervalSeconds * 1000;
+        const nextCheckAt = checkedAt + watcher.intervalSeconds * 1000;
 
         try {
           this.workspace.requireThread(watcher.threadId);

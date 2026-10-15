@@ -113,6 +113,7 @@ Connect a Telegram bot directly to OpenDots with the CopilotKit Channels Telegra
 In a private chat, every message is eligible. In groups, the bot responds when it is mentioned or when a user replies to one of its messages. The same Dot, tools, permissions, memory, and Intelligence conversation flow are used as web and Slack.
 
 See [Telegram setup](docs/SETUP.md#telegram) to configure the bot token, allowlist, selected Dot, and optional webhook mode.
+
 ### Inbox and Watchers
 
 OpenDots includes a small proactive layer on top of scheduled work. The Inbox collects completed and failed task outcomes and watcher triggers in one place. Watchers monitor public HTTP(S) URLs and queue a normal task in an existing conversation when content changes.
@@ -218,10 +219,10 @@ CopilotKit SDK telemetry collects usage metadata separately from conversation pe
 | Memory                     | User-managed preferences that permitted Dots can use                                                                                                               |
 | Automatic Learning         | Per-Dot Learning containers, conversation evidence routing, and published-skill delivery; see [setup](docs/SETUP.md#automatic-learning)                            |
 | Deployment                 | Local Node setup and separate application/browser containers                                                                                                       |
-| Navigation                 | Global command palette (Ctrl/⌘ K) with ranked cross-Space search over pages, Spaces, and Dots, plus keyboard-first commands                                         |
+| Navigation                 | Global command palette (Ctrl/⌘ K) with ranked cross-Space search over pages, Spaces, and Dots, plus keyboard-first commands                                        |
 
 Scheduled tasks run in their original conversation. If a worker stops or its lease expires during a run, OpenDots marks that run **Interrupted** and waits for an explicit retry. Review its pages and computer actions, then use **Retry after review** when appropriate. Completed effects may already be present even when a run has no final result.
-| Telegram                   | Direct Channels SDK adapter with explicit user allowlist and polling/webhook ingress                                                    |
+| Telegram | Direct Channels SDK adapter with explicit user allowlist and polling/webhook ingress |
 
 Scheduled tasks run in their original conversation. If a worker stops or its lease expires during a run, OpenDots marks that run **Interrupted** and waits for an explicit retry. Review its pages and computer actions, then use **Retry after review** when appropriate. Completed effects may already be present even when a run has no final result.
 

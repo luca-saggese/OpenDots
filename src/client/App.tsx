@@ -499,7 +499,9 @@ export function App() {
             <Bell size={17} />
             <span>Inbox</span>
             {!!state.inbox?.filter((item) => !item.readAt).length && (
-              <small>{state.inbox?.filter((item) => !item.readAt).length}</small>
+              <small>
+                {state.inbox?.filter((item) => !item.readAt).length}
+              </small>
             )}
           </button>
           <button
@@ -852,7 +854,9 @@ export function App() {
                       </div>
                       <div className="inbox-card-body">
                         <strong>{item.title}</strong>
-                        <small>{new Date(item.createdAt).toLocaleString()}</small>
+                        <small>
+                          {new Date(item.createdAt).toLocaleString()}
+                        </small>
                         <p>{item.body}</p>
                         <div className="inbox-card-actions">
                           {item.taskId && (
@@ -871,11 +875,9 @@ export function App() {
                           )}
                           <button
                             onClick={() =>
-                              void mutate(
-                                `/inbox/${item.id}/actions`,
-                                'POST',
-                                { action: item.readAt ? 'unread' : 'read' },
-                              )
+                              void mutate(`/inbox/${item.id}/actions`, 'POST', {
+                                action: item.readAt ? 'unread' : 'read',
+                              })
                             }
                           >
                             {item.readAt ? 'Mark unread' : 'Mark read'}
@@ -883,11 +885,9 @@ export function App() {
                           <button
                             className="quiet-button"
                             onClick={() =>
-                              void mutate(
-                                `/inbox/${item.id}/actions`,
-                                'POST',
-                                { action: 'dismiss' },
-                              )
+                              void mutate(`/inbox/${item.id}/actions`, 'POST', {
+                                action: 'dismiss',
+                              })
                             }
                           >
                             Dismiss
@@ -901,7 +901,10 @@ export function App() {
                   <div className="large-empty">
                     <Bell size={32} />
                     <h2>Nothing waiting for you.</h2>
-                    <p>Completed work, failures, and watcher triggers appear here.</p>
+                    <p>
+                      Completed work, failures, and watcher triggers appear
+                      here.
+                    </p>
                   </div>
                 )}
               </>
@@ -975,7 +978,9 @@ export function App() {
                           minutes < 1 ||
                           minutes > 1440
                         ) {
-                          setError('Complete the watcher fields with a 1–1440 minute interval.');
+                          setError(
+                            'Complete the watcher fields with a 1–1440 minute interval.',
+                          );
                           return;
                         }
                         const ok = await mutate('/watchers', 'POST', {
@@ -1028,7 +1033,9 @@ export function App() {
                       </div>
                     </form>
                   ) : (
-                    <p className="muted">Create a conversation before adding a watcher.</p>
+                    <p className="muted">
+                      Create a conversation before adding a watcher.
+                    </p>
                   )}
                   <div className="watcher-list">
                     {(state.watchers ?? []).map((watcher) => (

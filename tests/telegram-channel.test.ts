@@ -5,7 +5,11 @@ import type {
   Thread,
 } from '@copilotkit/channels';
 import { HttpAgent } from '@ag-ui/client';
-import { createTelegramChannel, telegramHandlers, telegramIdentity } from '../src/server/telegram-channel.js';
+import {
+  createTelegramChannel,
+  telegramHandlers,
+  telegramIdentity,
+} from '../src/server/telegram-channel.js';
 
 const config = { telegramUsers: ['12345'] };
 const identity: ChannelIdentityContext = {
@@ -100,9 +104,7 @@ it('runs allowed Telegram turns and ignores other platforms/users', async () => 
 it('posts a safe pause notice without running the agent', async () => {
   const f = fixture(true);
   await f.handlers.mention({ thread: f.thread, message });
-  expect(f.thread.post).toHaveBeenCalledWith(
-    expect.stringMatching(/paused/i),
-  );
+  expect(f.thread.post).toHaveBeenCalledWith(expect.stringMatching(/paused/i));
   expect(f.thread.runAgent).not.toHaveBeenCalled();
 });
 

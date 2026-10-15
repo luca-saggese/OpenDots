@@ -7,7 +7,9 @@ import {
 import { telegram } from '@copilotkit/channels/telegram';
 import type { PlatformConfig } from './platform-config.js';
 
-type TelegramConfig = Pick<PlatformConfig, 'telegramUsers'>;
+type TelegramConfig = Pick<PlatformConfig, 'telegramUsers'> & {
+  telegramUsers: string[];
+};
 type Report = (operation: string, errors: string[]) => void;
 
 export function telegramIdentity(
@@ -87,7 +89,10 @@ export function telegramHandlers(options: {
           replyError,
         ]);
         throw new AggregateError(
-          [new Error('Agent run: ' + runError), new Error('Error reply: ' + replyError)],
+          [
+            new Error('Agent run: ' + runError),
+            new Error('Error reply: ' + replyError),
+          ],
           'Telegram agent run and error reply failed',
         );
       }

@@ -183,7 +183,10 @@ export function createApp({
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success)
       return c.json(
-        { error: 'Enter a public URL, prompt, conversation, and an interval from 60 seconds to 24 hours.' },
+        {
+          error:
+            'Enter a public URL, prompt, conversation, and an interval from 60 seconds to 24 hours.',
+        },
         400,
       );
     if (!store.settings().researchAllowed)
@@ -218,7 +221,8 @@ export function createApp({
       .object({ action: z.enum(['pause', 'resume', 'delete']) })
       .strict()
       .safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: 'Unknown watcher action.' }, 400);
+    if (!parsed.success)
+      return c.json({ error: 'Unknown watcher action.' }, 400);
     const watcher = store.watcherAction(c.req.param('id'), parsed.data.action);
     return parsed.data.action === 'delete'
       ? c.json({ ok: true })

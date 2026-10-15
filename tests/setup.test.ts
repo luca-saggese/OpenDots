@@ -55,5 +55,17 @@ it('reports activation failure until the SDK recovers online', () => {
     'activation_failed',
   );
   expect(setupStatus(declared, 'online', true).slack).toBe('online');
-  expect(setupStatus({ ...config, telegramBotToken: 'token', telegramChannel: 'bot', telegramUsers: ['12345'] }, 'online', false, 'online').telegram).toBe('online');
+  expect(
+    setupStatus(
+      {
+        ...config,
+        telegramBotToken: 'token',
+        telegramChannel: 'bot',
+        telegramUsers: ['12345'],
+      },
+      'online',
+      false,
+      'online',
+    ).telegram,
+  ).toBe('online');
 });

@@ -565,6 +565,8 @@ export class Pages {
       this.db.exec('ROLLBACK');
       throw error;
     }
+  }
+
   private applyUpdate(
     spaceId: string,
     id: string,
@@ -578,6 +580,10 @@ export class Pages {
       );
     const parent = data.parentId === undefined ? page.parentId : data.parentId;
     this.parent(spaceId, parent, id);
+    const contentChanged =
+      (data.title ?? page.title) !== page.title ||
+      (data.content ?? page.content) !== page.content;
+    if (contentChanged) this.snapshot(page, 'edit');
     this.db
       .prepare(
         'UPDATE pages SET title=?,content=?,parentId=?,revision=revision+1,updatedAt=? WHERE id=? AND revision=?',
@@ -590,6 +596,7 @@ export class Pages {
         id,
         data.expectedRevision,
       );
+    if (contentChanged) this.pruneVersions(id);
     return this.get(spaceId, id);
   }
   thread(pageId: string, dotId: string) {

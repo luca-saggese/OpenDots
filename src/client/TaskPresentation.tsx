@@ -18,13 +18,18 @@ export const relative = (value: number) => {
 };
 const retryTimeLabel = (nextRunAt: number) => {
   const next = new Date(nextRunAt);
-  const time = next.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const time = next.toLocaleTimeString([], {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
   const today = new Date();
   const sameDay =
     next.getFullYear() === today.getFullYear() &&
     next.getMonth() === today.getMonth() &&
     next.getDate() === today.getDate();
-  return sameDay ? time : `${next.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+  return sameDay
+    ? time
+    : `${next.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
 };
 export const statusLabel = (task: Task) =>
   task.status === 'completed' && task.nextRunAt

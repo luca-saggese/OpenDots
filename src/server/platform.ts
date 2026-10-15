@@ -83,14 +83,14 @@ export class Platform {
     if (
       config.telegramBotToken &&
       config.telegramChannel &&
-      config.telegramUsers.length
+      (config.telegramUsers ?? []).length
     ) {
       const dotId = config.telegramDotId ?? workspace.dots()[0].id;
       if (!workspace.dot(dotId))
         throw new Error('TELEGRAM_DOT_ID does not identify an existing Dot.');
       const channel = createTelegramChannel({
         name: config.telegramChannel,
-        config,
+        config: { ...config, telegramUsers: config.telegramUsers ?? [] },
         ownerId: workspace.ownerId,
         paused: () => store.settings().paused,
         agent: () => new DotAgent(store, workspace, config, dotId, true),
@@ -151,12 +151,12 @@ export class Platform {
   setup() {
     const status = this.handler?.channels?.status();
     const slackStatus = this.config.slackChannel
-      ? status?.channels[this.config.slackChannel] ??
-        (this.channelStartupFailed ? 'activation_failed' : 'setup_required')
+      ? (status?.channels[this.config.slackChannel] ??
+        (this.channelStartupFailed ? 'activation_failed' : 'setup_required'))
       : 'not_configured';
     const telegramStatus = this.config.telegramChannel
-      ? status?.channels[this.config.telegramChannel] ??
-        (this.channelStartupFailed ? 'activation_failed' : 'setup_required')
+      ? (status?.channels[this.config.telegramChannel] ??
+        (this.channelStartupFailed ? 'activation_failed' : 'setup_required'))
       : 'not_configured';
     return setupStatus(
       this.config,
