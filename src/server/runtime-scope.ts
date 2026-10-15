@@ -3,6 +3,7 @@ export function validateRuntimeScope(
   request: Request,
   workspace: WorkspaceStore,
   body: unknown,
+  internalCollaboration = false,
 ): void {
   const url = new URL(request.url);
   const prefix = '/api/copilotkit/';
@@ -76,6 +77,11 @@ export function validateRuntimeScope(
     if (candidate) {
       if (threadId && candidate !== threadId) return deny();
       workspace.requireThread(candidate, agentId);
+      if (
+        workspace.collaboration.forThread(candidate) &&
+        !internalCollaboration
+      )
+        return deny();
     }
   }
 }

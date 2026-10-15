@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type FormEvent,
+} from 'react';
 import {
   ArrowDown,
   ArrowLeft,
@@ -13,10 +19,16 @@ import type {
   OrganizationalConversation,
   OrganizationalMessage,
   SessionAgent,
+  CollaborationMention,
+  CollaborationSnapshot,
 } from '../shared/types';
 import type { DotProfile } from '../shared/types';
 import type { Dot } from '../shared/types';
 import { api } from './api';
+import {
+  MentionComposer,
+  CollaborationControls,
+} from './CollaborationControls';
 
 type Person = { dot: Dot; profile: DotProfile };
 type ParticipantView = ConversationParticipant & {
@@ -61,6 +73,116 @@ export function ProjectConversations({
   const [title, setTitle] = useState('');
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [mentions, setMentions] = useState<CollaborationMention[]>([]);
+  const [publishOnly, setPublishOnly] = useState(false);
+  const [snapshot, setSnapshot] = useState<CollaborationSnapshot>();
+  const [sendKey, setSendKey] = useState<string>();
+  const selectedId = selected?.conversation.id;
+  const activeConversation = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    activeConversation.current = selectedId;
+    setSnapshot(undefined);
+    setMentions([]);
+    setDraft('');
+    setSendKey(undefined);
+    setPublishOnly(false);
+    if (!selectedId) return;
+    let active = true;
+    let pending = false;
+    const controller = new AbortController();
+    const poll = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const [state, page, detail] = await Promise.all([
+          api<CollaborationSnapshot>(
+            `/organizational-conversations/${selectedId}/collaboration`,
+            'GET',
+            undefined,
+            controller.signal,
+          ),
+          api<OrganizationalMessage[]>(
+            `/organizational-conversations/${selectedId}/messages?limit=${PAGE_SIZE}`,
+            'GET',
+            undefined,
+            controller.signal,
+          ),
+          api<ConversationDetails>(
+            `/organizational-conversations/${selectedId}`,
+            'GET',
+            undefined,
+            controller.signal,
+          ),
+        ]);
+        if (active) {
+          setSnapshot(state);
+          setParticipants(
+            detail.participants.map((participant) => {
+              const agent = agents.find(
+                (item) => item.id === participant.participantId,
+              );
+              const person =
+                agent && roster.find((item) => item.dot.id === agent.dotId);
+              return {
+                ...participant,
+                name:
+                  participant.participantType === 'user'
+                    ? 'You'
+                    : (person?.dot.name ??
+                      agent?.displayName ??
+                      'Collaborator'),
+                summary: person?.profile.summary ?? '',
+              };
+            }),
+          );
+          setMessages((previous) =>
+            [
+              ...new Map(
+                [...previous, ...page].map((message) => [message.id, message]),
+              ).values(),
+            ].sort((a, b) => a.sequenceNumber - b.sequenceNumber),
+          );
+        }
+      } catch (err) {
+        if (active) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : 'Could not refresh participation status.',
+          );
+          setMessages([]);
+          setSnapshot(undefined);
+          setParticipants([]);
+          setHasOlder(false);
+        }
+      } finally {
+        pending = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => void poll(), 1500);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      controller.abort();
+    };
+  }, [selectedId]);
+  const participationAction = async (path: string, body: unknown) => {
+    if (!selectedId) return;
+    setError('');
+    try {
+      const state = await api<CollaborationSnapshot>(
+        `/organizational-conversations/${selectedId}${path}`,
+        path === '/collaboration' ? 'PUT' : 'POST',
+        body,
+      );
+      if ('settings' in state) setSnapshot(state);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Participation request failed.',
+      );
+    }
+  };
 
   const loadRows = useCallback(async () => {
     setError('');
@@ -90,6 +212,7 @@ export function ProjectConversations({
   }, [loadRows]);
 
   const openConversation = async (row: Summary) => {
+    activeConversation.current = row.conversation.id;
     setError('');
     setNotice('');
     setSelected(row);
@@ -105,6 +228,7 @@ export function ProjectConversations({
           `/organizational-conversations/${row.conversation.id}/messages?limit=${PAGE_SIZE}`,
         ),
       ]);
+      if (activeConversation.current !== row.conversation.id) return;
       const mapped = detail.participants.map((participant) => {
         const agent = agents.find(
           (item) => item.id === participant.participantId,
@@ -116,7 +240,7 @@ export function ProjectConversations({
           name:
             participant.participantType === 'user'
               ? 'You'
-              : (agent?.displayName ?? person?.dot.name ?? 'Collaborator'),
+              : (person?.dot.name ?? agent?.displayName ?? 'Collaborator'),
           summary: person?.profile.summary ?? '',
         };
       });
@@ -124,6 +248,7 @@ export function ProjectConversations({
       setMessages(page);
       setHasOlder(page.length === PAGE_SIZE);
     } catch (err) {
+      if (activeConversation.current !== row.conversation.id) return;
       setError(
         err instanceof Error
           ? err.message
@@ -132,7 +257,8 @@ export function ProjectConversations({
       setSelected(undefined);
       await loadRows();
     } finally {
-      setLoadingMessages(false);
+      if (activeConversation.current === row.conversation.id)
+        setLoadingMessages(false);
     }
   };
   const createConversation = async () => {
@@ -189,6 +315,7 @@ export function ProjectConversations({
       const page = await api<OrganizationalMessage[]>(
         `/organizational-conversations/${selected.conversation.id}/messages?before=${messages[0].sequenceNumber}&limit=${PAGE_SIZE}`,
       );
+      if (activeConversation.current !== selected.conversation.id) return;
       setMessages((current) => [...page, ...current]);
       setHasOlder(page.length === PAGE_SIZE);
     } catch (err) {
@@ -205,19 +332,36 @@ export function ProjectConversations({
     setSending(true);
     setError('');
     setNotice('');
+    const requestKey = sendKey ?? crypto.randomUUID();
+    setSendKey(requestKey);
     try {
       await api(
         `/organizational-conversations/${selected.conversation.id}/messages`,
         'POST',
-        { content: draft.trim(), idempotencyKey: crypto.randomUUID() },
+        {
+          content: draft.trim(),
+          idempotencyKey: requestKey,
+          mentions,
+          activation: publishOnly
+            ? 'none'
+            : mentions.length
+              ? 'mentioned'
+              : selected.conversation.kind === 'direct'
+                ? 'direct'
+                : 'none',
+        },
       );
+      if (activeConversation.current !== selected.conversation.id) return;
       setDraft('');
+      setMentions([]);
+      setSendKey(undefined);
       setNotice(
-        'Message published. Automatic collaborator activation will be available with orchestration.',
+        'Message published. Requested contributions are tracked below.',
       );
       const page = await api<OrganizationalMessage[]>(
         `/organizational-conversations/${selected.conversation.id}/messages?limit=${PAGE_SIZE}`,
       );
+      if (activeConversation.current !== selected.conversation.id) return;
       setMessages(page);
       setHasOlder(page.length === PAGE_SIZE);
       await loadRows();
@@ -292,6 +436,28 @@ export function ProjectConversations({
     }
   };
   const current = selected?.conversation;
+  const activationNames = participants
+    .filter(
+      (participant) =>
+        participant.participantType === 'session_agent' &&
+        participant.role !== 'observer' &&
+        agents.some(
+          (agent) =>
+            agent.id === participant.participantId && agent.status === 'active',
+        ) &&
+        (mentions.length
+          ? mentions.some(
+              (mention) =>
+                mention.type === 'all' ||
+                mention.sessionAgentId === participant.participantId,
+            )
+          : current?.kind === 'direct'),
+    )
+    .map(
+      (participant) =>
+        `${participant.name} (${agents.find((agent) => agent.id === participant.participantId)?.role ?? participant.role})`,
+    )
+    .join(', ');
   const selectableAgents = agents.filter((agent) => agent.status === 'active');
   const availableToAdd = selectableAgents.filter(
     (agent) =>
@@ -310,6 +476,8 @@ export function ProjectConversations({
             className="secondary-button"
             onClick={() => {
               setSelected(undefined);
+              activeConversation.current = undefined;
+              void loadRows();
               setParticipants([]);
               setMessages([]);
               setError('');
@@ -380,8 +548,8 @@ export function ProjectConversations({
                           {message.senderType === 'user'
                             ? 'You'
                             : (participant?.name ??
-                              agent?.displayName ??
                               dot?.name ??
+                              agent?.displayName ??
                               'Collaborator')}
                         </b>
                         <time
@@ -391,6 +559,15 @@ export function ProjectConversations({
                         </time>
                       </div>
                       <p>{message.content}</p>
+                      {agent && (
+                        <small>
+                          {agent.role} ·{' '}
+                          {snapshot?.executions.find(
+                            (execution) =>
+                              execution.threadId === message.sourceThreadId,
+                          )?.status ?? 'published'}
+                        </small>
+                      )}
                     </article>
                   );
                 })
@@ -407,24 +584,57 @@ export function ProjectConversations({
                 className="organizational-composer"
                 onSubmit={(event) => void sendMessage(event)}
               >
-                <label
-                  className="sr-only"
-                  htmlFor="organizational-message-input"
-                >
-                  Write an organizational message
-                </label>
-                <textarea
-                  id="organizational-message-input"
-                  rows={3}
+                <MentionComposer
+                  conversationId={current.id}
                   value={draft}
-                  maxLength={20000}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Write a message for the project conversation…"
+                  onChange={(value) => {
+                    setDraft(value);
+                    setSendKey(undefined);
+                  }}
+                  mentions={mentions}
+                  onMentions={(value) => {
+                    setMentions(value);
+                    setSendKey(undefined);
+                  }}
+                  candidates={participants.flatMap((participant) => {
+                    const agent = agents.find(
+                      (item) =>
+                        item.id === participant.participantId &&
+                        item.status === 'active',
+                    );
+                    const dot =
+                      agent &&
+                      roster.find((item) => item.dot.id === agent.dotId)?.dot;
+                    return agent && dot && participant.role !== 'observer'
+                      ? [
+                          {
+                            sessionAgentId: agent.id,
+                            dotId: dot.id,
+                            name: dot.name,
+                            role: agent.role,
+                          },
+                        ]
+                      : [];
+                  })}
                 />
+                <label className="publish-only">
+                  <input
+                    type="checkbox"
+                    checked={publishOnly}
+                    onChange={(event) => {
+                      setPublishOnly(event.target.checked);
+                      setSendKey(undefined);
+                    }}
+                  />
+                  Publish without requesting responses
+                </label>
                 <div>
                   <small>
-                    Publishing records this message. It does not activate a Dot
-                    or request an AI response.
+                    {publishOnly
+                      ? 'No collaborator will be activated.'
+                      : activationNames
+                        ? `Requested: ${activationNames}.`
+                        : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
                   </small>
                   <button
                     className="primary"
@@ -436,6 +646,25 @@ export function ProjectConversations({
                 </div>
               </form>
             )}
+            <CollaborationControls
+              snapshot={snapshot}
+              name={(agentId) => {
+                const agent = agents.find((item) => item.id === agentId);
+                return (
+                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
+                    .name ?? 'Collaborator'
+                );
+              }}
+              triggerMessageId={
+                messages
+                  .filter((message) => message.senderType === 'user')
+                  .at(-1)?.id
+              }
+              onAction={participationAction}
+              onSettings={(settings) =>
+                participationAction('/collaboration', settings)
+              }
+            />
           </div>
           <aside className="conversation-participants">
             <div className="conversation-panel-heading">
@@ -565,9 +794,9 @@ export function ProjectConversations({
         </button>
       </div>
       <p className="muted">
-        Organizational conversations persist separately from Intelligence chats.
-        Messages are recorded here and do not automatically activate
-        collaborators.
+        Project discussions retain each collaborator’s identity. Select @
+        recipients to request real contributions, or share a message without
+        activation.
       </p>
       {error && (
         <p className="chat-error" role="alert">

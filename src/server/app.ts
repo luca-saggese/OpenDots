@@ -140,7 +140,7 @@ export function createApp({
           400,
         );
       try {
-        platform.workspace.requireThread(parsed.data.threadId);
+        platform.workspace.requireHumanThread(parsed.data.threadId);
       } catch {
         return c.json(
           { error: 'Conversation is not owned by this workspace.' },
@@ -198,7 +198,7 @@ export function createApp({
           503,
         );
       try {
-        platform.workspace.requireThread(parsed.data.threadId);
+        platform.workspace.requireHumanThread(parsed.data.threadId);
       } catch {
         return c.json(
           { error: 'Conversation is not owned by this workspace.' },

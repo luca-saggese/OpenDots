@@ -1,4 +1,5 @@
 import { ComputerStore } from './computer-store.js';
+import { CollaborationStore } from './collaboration-store.js';
 import { ConnectionStore } from './connection-store.js';
 import { Pages } from './pages.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -32,6 +33,8 @@ import type {
 import { memberTemplates, teamTemplates } from './office-templates.js';
 export class WorkspaceStore {
   private db: DatabaseSync;
+  readonly collaboration: CollaborationStore;
+  private runningThreads = new Set<string>();
   readonly pages: Pages;
   readonly computers: ComputerStore;
   readonly connections: ConnectionStore;
@@ -209,6 +212,7 @@ export class WorkspaceStore {
         INSERT INTO dot_spaces SELECT id, spaceId FROM dots;
         COMMIT;`);
     }
+    this.collaboration = new CollaborationStore(this.db);
     this.computers = new ComputerStore(this.db);
     this.connections = new ConnectionStore(this.db);
     this.pages = new Pages(this.db, (id) =>
@@ -1133,7 +1137,7 @@ export class WorkspaceStore {
         return [
           {
             ...participant,
-            name: agent.displayName ?? dot.name,
+            name: dot.name,
             summary: this.dotProfile(dot.id).summary,
           },
         ];
@@ -2185,7 +2189,7 @@ export class WorkspaceStore {
     );
     if (!agent || !this.activeAgentMembership(conversation, sessionAgentId))
       throw new Error('Session Agent is not authorized for this conversation.');
-    const thread = this.requireThread(threadId, agent.dotId);
+    const thread = this.requireHumanThread(threadId, agent.dotId);
     const link: ConversationThreadLink = {
       conversationId,
       sessionAgentId,
@@ -3000,6 +3004,7 @@ export class WorkspaceStore {
     sessionAgentId: string,
     threadId: string,
     isPrimary = false,
+    internalCollaboration = false,
   ): SessionThread {
     const agent = this.requireSessionAgent(sessionAgentId);
     const masterSession = this.requireMasterSession(agent.masterSessionId);
@@ -3013,7 +3018,8 @@ export class WorkspaceStore {
       );
     if (!this.canAccessSpace(agent.dotId, masterSession.spaceId))
       throw new Error('Dot does not have access to this Space.');
-    this.requireThread(threadId, agent.dotId);
+    if (internalCollaboration) this.requireThread(threadId, agent.dotId);
+    else this.requireHumanThread(threadId, agent.dotId);
     const existing = this.db
       .prepare('SELECT * FROM session_threads WHERE threadId=?')
       .get(threadId);
@@ -3234,11 +3240,16 @@ export class WorkspaceStore {
   conversations(): Conversation[] {
     return this.db
       .prepare(
-        'SELECT * FROM thread_bindings WHERE ownerId=? ORDER BY createdAt DESC',
+        'SELECT t.* FROM thread_bindings t WHERE ownerId=? AND NOT EXISTS (SELECT 1 FROM collaboration_executions e WHERE e.threadId=t.id) ORDER BY createdAt DESC',
       )
       .all(this.ownerId) as unknown as Conversation[];
   }
-  bindThread(id: string, dotId: string, title: string): Conversation {
+  bindThread(
+    id: string,
+    dotId: string,
+    title: string,
+    learningOverride?: null,
+  ): Conversation {
     const dot = this.dot(dotId);
     if (!dot) throw new Error('Dot not found.');
     const value: Conversation = {
@@ -3247,7 +3258,8 @@ export class WorkspaceStore {
       ownerId: this.ownerId,
       title,
       createdAt: Date.now(),
-      learningContainerId: dot.learningContainerId ?? null,
+      learningContainerId:
+        learningOverride === null ? null : (dot.learningContainerId ?? null),
     };
     this.db
       .prepare(
@@ -3264,10 +3276,93 @@ export class WorkspaceStore {
     return value;
   }
   requireThread(id: string, dotId?: string): Conversation {
-    const thread = this.conversations().find((thread) => thread.id === id);
+    const thread = this.db
+      .prepare('SELECT * FROM thread_bindings WHERE id=? AND ownerId=?')
+      .get(id, this.ownerId) as unknown as Conversation | undefined;
     if (!thread || (dotId && thread.dotId !== dotId))
       throw new Error('Conversation does not belong to this Dot and owner.');
     return thread;
+  }
+  requireHumanThread(id: string, dotId?: string) {
+    if (this.collaboration.forThread(id))
+      throw new Error(
+        'Project execution threads are internal. Read authorized organizational messages instead.',
+      );
+    return this.requireThread(id, dotId);
+  }
+  acquireThreadRun(threadId: string) {
+    if (this.runningThreads.has(threadId))
+      throw new Error('A turn is already running on this thread.');
+    this.runningThreads.add(threadId);
+    return () => this.runningThreads.delete(threadId);
+  }
+  collaborationAccess(
+    conversationId: string,
+    userId: string,
+    sessionAgentId?: string,
+  ) {
+    const { conversation, participant: user } =
+      this.authorizeConversationParticipant(conversationId, 'user', userId, {
+        requireActiveConversation: true,
+      });
+    if (user.status !== 'active' || user.role === 'observer')
+      throw new Error('Conversation access denied.');
+    if (!sessionAgentId) return { conversation, user };
+    const agent = this.activeSessionAgent(
+      sessionAgentId,
+      conversation.masterSessionId,
+    );
+    const participant = this.activeAgentMembership(
+      conversation,
+      sessionAgentId,
+    );
+    if (!agent || !participant || participant.role === 'observer')
+      throw new Error(
+        'Session Agent is not authorized to respond in this conversation.',
+      );
+    return { conversation, user, agent, participant };
+  }
+  prepareCollaborationThread(executionId: string) {
+    const execution = this.collaboration.execution(executionId);
+    if (!execution || execution.status !== 'running')
+      throw new Error('Execution is not running.');
+    this.collaborationAccess(
+      execution.conversationId,
+      this.ownerId,
+      execution.sessionAgentId,
+    );
+    this.bindThread(
+      execution.threadId,
+      execution.dotId,
+      'Project collaboration turn',
+      null,
+    );
+    this.associateSessionThread(
+      execution.sessionAgentId,
+      execution.threadId,
+      false,
+      true,
+    );
+    this.relinkCollaborationThread(executionId);
+  }
+  relinkCollaborationThread(executionId: string) {
+    const execution = this.collaboration.execution(executionId);
+    if (!execution) throw new Error('Execution not found.');
+    this.collaborationAccess(
+      execution.conversationId,
+      this.ownerId,
+      execution.sessionAgentId,
+    );
+    this.db
+      .prepare(
+        'INSERT INTO conversation_threads(conversationId,sessionAgentId,threadId,linkedAt) VALUES (?,?,?,?) ON CONFLICT(conversationId,sessionAgentId) DO UPDATE SET threadId=excluded.threadId,linkedAt=excluded.linkedAt',
+      )
+      .run(
+        execution.conversationId,
+        execution.sessionAgentId,
+        execution.threadId,
+        Date.now(),
+      );
   }
   bindTask(taskId: string, threadId: string) {
     this.requireThread(threadId);

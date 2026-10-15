@@ -32,7 +32,7 @@ export class VoiceService {
   }
   async begin(threadId: string, sdp: string, signal: AbortSignal) {
     this.platform.requireReady();
-    this.platform.workspace.requireThread(threadId);
+    this.platform.workspace.requireHumanThread(threadId);
     if (!this.platform.setup().voice)
       throw new Error('Voice setup required: VOICE_API_KEY and VOICE_MODEL.');
     if (this.platform.store.settings().paused)
@@ -55,7 +55,7 @@ export class VoiceService {
     });
     const timeout = AbortSignal.timeout(20_000);
     const dot = this.platform.workspace.dot(
-      this.platform.workspace.requireThread(threadId).dotId,
+      this.platform.workspace.requireHumanThread(threadId).dotId,
     )!;
     try {
       const combined = AbortSignal.any([signal, timeout, controller.signal]);

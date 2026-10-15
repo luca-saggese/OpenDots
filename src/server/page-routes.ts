@@ -7,7 +7,7 @@ import type { Platform } from './platform.js';
 export function pageRoutes(platform: Platform) {
   const app = new Hono();
   app.get('/conversations/:id/reviewed-page/:toolCallId', (c) => {
-    const thread = platform.workspace.requireThread(c.req.param('id'));
+    const thread = platform.workspace.requireHumanThread(c.req.param('id'));
     const receipt = platform.workspace.pages.reviewReceipt(
       thread.id,
       c.req.param('toolCallId'),
@@ -33,7 +33,7 @@ export function pageRoutes(platform: Platform) {
       .safeParse(await c.req.json().catch(() => null));
     if (!data.success)
       return c.json({ error: 'Enter a valid page draft.' }, 400);
-    const thread = platform.workspace.requireThread(c.req.param('id'));
+    const thread = platform.workspace.requireHumanThread(c.req.param('id'));
     if (!platform.workspace.canAccessSpace(thread.dotId, data.data.spaceId))
       return c.json(
         { error: 'This Dot no longer has access to the selected Space.' },
@@ -51,7 +51,7 @@ export function pageRoutes(platform: Platform) {
     );
   });
   app.get('/conversations/:id/page-context', (c) => {
-    const thread = platform.workspace.requireThread(c.req.param('id'));
+    const thread = platform.workspace.requireHumanThread(c.req.param('id'));
     const dot = platform.workspace.dot(thread.dotId)!;
     const page = platform.workspace.pages.forThread(thread.id);
     return c.json(

@@ -1,4 +1,5 @@
 import { setupInputSchema } from './setup-telemetry.js';
+import { collaborationRoutes, mentionSchema } from './collaboration-routes.js';
 import { pageRoutes } from './page-routes.js';
 import { searchWorkspace } from './search.js';
 import { Hono, type Context } from 'hono';
@@ -106,6 +107,22 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       : c.json({ error: 'Team Template not found.' }, 404);
   });
   app.get('/office/dots', (c) => c.json(platform.workspace.dotProfiles()));
+  app.put('/office/dots/:id/name', async (c) => {
+    const data = z
+      .object({ name: z.string().trim().min(1).max(40) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!data.success)
+      return c.json(
+        { error: 'Provide a valid permanent collaborator name.' },
+        400,
+      );
+    const dot = platform.workspace.dot(c.req.param('id'));
+    if (!dot) return c.json({ error: 'Dot not found.' }, 404);
+    return c.json(
+      platform.workspace.updateDot(dot.id, { ...dot, name: data.data.name }),
+    );
+  });
   app.get('/office/dots/:id/profile', (c) => {
     try {
       return c.json({
@@ -416,6 +433,8 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         .enum(['conversation', 'participants'])
         .default('conversation'),
       idempotencyKey: z.string().trim().min(1).max(200).optional(),
+      mentions: z.array(mentionSchema).max(100).optional(),
+      activation: z.enum(['none', 'mentioned', 'direct']).optional(),
     })
     .strict();
   app.get('/master-sessions/:id/conversations', (c) => {
@@ -719,12 +738,19 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       );
     try {
       return c.json(
-        platform.workspace.listConversationMessagesForUser(
-          c.req.param('id'),
-          platform.workspace.ownerId,
-          data.data.before,
-          data.data.limit,
-        ),
+        platform.workspace
+          .listConversationMessagesForUser(
+            c.req.param('id'),
+            platform.workspace.ownerId,
+            data.data.before,
+            data.data.limit,
+          )
+          .map((message) => ({
+            ...message,
+            mentions:
+              platform.workspace.collaboration.command(message.id)?.mentions ??
+              [],
+          })),
       );
     } catch (error) {
       return sessionError(c, error);
@@ -750,17 +776,17 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       return c.json({ error: 'JSON message content must be valid JSON.' }, 400);
     try {
       return c.json(
-        platform.workspace.appendUserConversationMessage({
-          conversationId: c.req.param('id'),
-          userId: platform.workspace.ownerId,
-          ...data.data,
-        }),
+        platform.collaboration.publishHuman(c.req.param('id'), data.data),
         201,
       );
     } catch (error) {
       return sessionError(c, error);
     }
   });
+  app.route(
+    '/organizational-conversations',
+    collaborationRoutes(platform.collaboration),
+  );
   app.put('/organizational-conversations/:id/status', async (c) => {
     const data = z
       .object({ status: z.enum(['closed', 'archived']) })
@@ -904,9 +930,10 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       201,
     );
   });
-  app.get('/conversations/:id/capture', (c) =>
-    c.json(platform.workspace.capture(c.req.param('id'))),
-  );
+  app.get('/conversations/:id/capture', (c) => {
+    platform.workspace.requireHumanThread(c.req.param('id'));
+    return c.json(platform.workspace.capture(c.req.param('id')));
+  });
   app.post('/voice/calls', async (c) => {
     const data = z
       .object({ threadId: z.string(), sdp: z.string().max(100000) })

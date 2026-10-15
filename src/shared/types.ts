@@ -240,12 +240,65 @@ export interface OrganizationalMessage {
   sourceThreadId: string | null;
   sourceTurnId: string | null;
   idempotencyKey: string | null;
+  mentions?: CollaborationMention[];
 }
 export interface ConversationThreadLink {
   conversationId: string;
   sessionAgentId: string;
   threadId: string;
   linkedAt: number;
+}
+export type CollaborationMention =
+  | {
+      type: 'agent';
+      conversationId: string;
+      sessionAgentId: string;
+      dotId: string;
+      displayName: string;
+    }
+  | { type: 'all'; conversationId: string };
+export type CollaborationMode = 'manual' | 'hand_raise';
+export interface CollaborationExecution {
+  id: string;
+  requestId: string;
+  conversationId: string;
+  sessionAgentId: string;
+  dotId: string;
+  threadId: string;
+  turnId: string;
+  triggerMessageId: string;
+  kind: 'response' | 'evaluation';
+  status:
+    'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
+  authorization: string;
+  output: string | null;
+  error: string | null;
+  createdAt: number;
+  completedAt: number | null;
+  handRaiseId: string | null;
+}
+export interface HandRaise {
+  id: string;
+  conversationId: string;
+  sessionAgentId: string;
+  triggerMessageId: string;
+  executionId: string;
+  reason: string;
+  status: 'pending' | 'approved' | 'dismissed' | 'expired';
+  createdAt: number;
+  resolvedAt: number | null;
+  resolvedBy: string | null;
+}
+export interface CollaborationSnapshot {
+  settings: {
+    mode: CollaborationMode;
+    maxActivations: number;
+    evaluationBudget: number;
+  };
+  executions: (Omit<CollaborationExecution, 'output' | 'authorization'> & {
+    canRecover: boolean;
+  })[];
+  handRaises: HandRaise[];
 }
 export interface CallReceipt {
   anchorMessageId?: string | null;

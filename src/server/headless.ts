@@ -29,6 +29,7 @@ export async function runThreadTurn(
   prompt: string,
   signal: AbortSignal,
   metadata?: Record<string, unknown>,
+  runId?: string,
 ): Promise<string> {
   signal.throwIfAborted();
   const response = await fetch(`${runtimeUrl}/info`, { headers, signal });
@@ -73,7 +74,7 @@ export async function runThreadTurn(
       content: prompt,
       ...(metadata ? { metadata } : {}),
     });
-    const result = await agent.runAgent();
+    const result = await agent.runAgent(runId ? { runId } : undefined);
     signal.throwIfAborted();
     return currentTurnText(result.newMessages, runError);
   } finally {

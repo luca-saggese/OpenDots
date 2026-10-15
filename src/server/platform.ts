@@ -24,7 +24,13 @@ import {
 import { validateRuntimeScope } from './runtime-scope.js';
 import { learningSelector } from './learning.js';
 import { SetupTelemetry } from './setup-telemetry.js';
+import {
+  CollaborationService,
+  type CollaborationRuntime,
+} from './collaboration.js';
 export class Platform {
+  private collaborationSecret = randomUUID();
+  readonly collaboration: CollaborationService;
   private channelStartupFailed = false;
   readonly setupTelemetry: SetupTelemetry;
   readonly pages: PageService;
@@ -36,6 +42,7 @@ export class Platform {
     readonly store: Store,
     readonly workspace: WorkspaceStore,
     readonly config: PlatformConfig,
+    collaborationRuntime?: CollaborationRuntime,
   ) {
     this.setupTelemetry = new SetupTelemetry(store);
     this.computers = new ComputerService(
@@ -48,6 +55,43 @@ export class Platform {
       this.requireReady();
       return this.intelligence!;
     });
+    this.collaboration = new CollaborationService(
+      workspace,
+      collaborationRuntime ?? {
+        ready: () => this.requireReady(),
+        createThread: async (threadId, dotId) => {
+          await this.intelligence!.createThread({
+            threadId,
+            agentId: dotId,
+            userId: workspace.ownerId,
+            name: 'Project collaboration turn',
+          });
+        },
+        turn: (execution, signal) =>
+          runThreadTurn(
+            config.runtimeUrl,
+            {
+              ...(config.ownerToken
+                ? { Authorization: `Bearer ${config.ownerToken}` }
+                : {}),
+              'x-opendots-collaboration': this.collaborationSecret,
+            },
+            execution.dotId,
+            execution.threadId,
+            'Respond to the authorized project activation in your server-provided collaboration context.',
+            signal,
+            {
+              opendotsSource: 'project_collaboration',
+              executionId: execution.id,
+            },
+            execution.turnId,
+          ),
+      },
+      {
+        timeoutMs: config.agentRunTimeoutMs,
+        paused: () => store.settings().paused,
+      },
+    );
     if (!config.intelligenceKey) return;
     this.intelligence = new CopilotKitIntelligence({
       apiKey: config.intelligenceKey,
@@ -190,6 +234,8 @@ export class Platform {
     }
   }
   async stop() {
+    this.collaboration.stop();
+    await this.collaboration.idle();
     await this.setupTelemetry.stop();
     await this.handler?.channels?.stop();
   }
@@ -213,7 +259,7 @@ export class Platform {
   }
   async history(threadId: string): Promise<string> {
     this.requireReady();
-    this.workspace.requireThread(threadId);
+    this.workspace.requireHumanThread(threadId);
     const history = await this.intelligence!.getThreadMessages({
       threadId,
       userId: this.workspace.ownerId,
@@ -241,7 +287,13 @@ export class Platform {
         .json()
         .catch(() => null);
     try {
-      validateRuntimeScope(request, this.workspace, body);
+      validateRuntimeScope(
+        request,
+        this.workspace,
+        body,
+        request.headers.get('x-opendots-collaboration') ===
+          this.collaborationSecret,
+      );
     } catch (error) {
       return Response.json(
         {
@@ -262,7 +314,7 @@ export class Platform {
     metadata?: Record<string, unknown>,
   ): Promise<string> {
     this.requireReady();
-    const thread = this.workspace.requireThread(threadId);
+    const thread = this.workspace.requireHumanThread(threadId);
     return runThreadTurn(
       this.config.runtimeUrl,
       this.config.ownerToken

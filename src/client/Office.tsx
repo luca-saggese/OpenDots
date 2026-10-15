@@ -70,6 +70,7 @@ export function Office({
   const [loading, setLoading] = useState(true);
   const [selectedDot, setSelectedDot] = useState<string>();
   const [profileDraft, setProfileDraft] = useState<{
+    name?: string;
     summary: string;
     skills: string;
     workStyle: string;
@@ -766,6 +767,17 @@ export function Office({
             </button>
             <span className="eyebrow">PERMANENT PROFILE</span>
             <h2 id="profile-title">{chosenDot.dot.name}</h2>
+            <label className="field-label" htmlFor="profile-name">
+              Permanent collaborator name
+            </label>
+            <input
+              id="profile-name"
+              maxLength={40}
+              value={profileDraft.name ?? chosenDot.dot.name}
+              onChange={(event) =>
+                setProfileDraft({ ...profileDraft, name: event.target.value })
+              }
+            />
             <label className="field-label" htmlFor="profile-summary">
               Professional summary
             </label>
@@ -800,8 +812,12 @@ export function Office({
             />
             <button
               className="primary"
+              disabled={!(profileDraft.name ?? chosenDot.dot.name).trim()}
               onClick={async () => {
                 try {
+                  await api(`/office/dots/${chosenDot.dot.id}/name`, 'PUT', {
+                    name: profileDraft.name ?? chosenDot.dot.name,
+                  });
                   await api(`/office/dots/${chosenDot.dot.id}/profile`, 'PUT', {
                     summary: profileDraft.summary,
                     skills: profileDraft.skills
@@ -812,6 +828,7 @@ export function Office({
                   });
                   setProfileDraft(undefined);
                   await refreshOffice();
+                  await onRefresh();
                 } catch (err) {
                   setError(
                     err instanceof Error

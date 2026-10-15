@@ -4325,6 +4325,7 @@ h3 {
 }
 .office-page {
   --border: var(--line);
+  --accent: var(--blue-dark);
   --surface: #fff;
   --background: #f8f7f4;
   width: 100%;
@@ -5005,6 +5006,113 @@ h3 {
 }
 .conversation-agent-picker small {
   color: var(--muted);
+}
+.mention-composer {
+  position: relative;
+}
+.mention-suggestions {
+  display: grid;
+  gap: 3px;
+  max-height: 230px;
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.mention-suggestions button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px;
+  border: 0;
+  color: inherit;
+  background: var(--background);
+  text-align: left;
+  cursor: pointer;
+}
+.mention-suggestions small {
+  color: var(--muted);
+}
+.mention-selections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
+.mention-selections button {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--accent);
+  cursor: pointer;
+}
+.publish-only {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.collaboration-controls {
+  padding: 13px;
+  border-top: 1px solid var(--border);
+}
+.collaboration-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+.collaboration-settings label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.collaboration-settings select,
+.collaboration-settings input {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px;
+  background: var(--background);
+  color: var(--ink);
+}
+.collaboration-settings input {
+  max-width: 85px;
+}
+.hand-raise {
+  margin: 11px 0;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--background);
+}
+.hand-raise p {
+  margin: 7px 0;
+  white-space: pre-wrap;
+}
+.collaboration-execution {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.collaboration-execution p {
+  flex-basis: 100%;
+  margin: 0;
+  color: #a53636;
+}
+.collaboration-execution.running > span {
+  color: var(--accent);
+}
+@media (max-width: 850px) {
+  .conversation-layout {
+    grid-template-columns: 1fr;
+  }
 }
 .secondary-button {
   display: inline-flex;

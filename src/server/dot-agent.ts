@@ -18,6 +18,10 @@ import { chat, maxIterations } from '@tanstack/ai';
 import { openaiCompatibleText } from '@tanstack/ai-openai/compatible';
 import { learnedSkillTools, tanstackTools } from './tanstack-tools.js';
 import { Observable } from 'rxjs';
+import {
+  assembleCollaborationContext,
+  assertCollaborationExecution,
+} from './collaboration-context.js';
 import { z } from 'zod';
 import { Store } from './store.js';
 import { WorkspaceStore } from './workspace.js';
@@ -68,6 +72,7 @@ export class DotAgent extends AbstractAgent {
       let timedOut = false;
       let finished = false;
       let configurationFailure = false;
+      let releaseThread: (() => void) | undefined;
       const turnTimeLimitMs =
         this.config.agentRunTimeoutMs ?? DEFAULT_AGENT_RUN_TIMEOUT_MS;
       const observe = answerObserver((event) =>
@@ -100,6 +105,22 @@ export class DotAgent extends AbstractAgent {
           input.threadId,
           dot.id,
         );
+        releaseThread = this.workspace.acquireThreadRun(input.threadId);
+        const collaboration = this.workspace.collaboration.forThread(
+          input.threadId,
+        );
+        if (collaboration && collaboration.status !== 'running')
+          throw new Error('Project execution is not authorized for this turn.');
+        if (collaboration) {
+          this.workspace.collaboration.runtimeTurn(
+            collaboration.id,
+            input.runId,
+          );
+          collaboration.turnId = input.runId;
+        }
+        const collaborationContext = collaboration
+          ? assembleCollaborationContext(this.workspace, collaboration)
+          : undefined;
         if (
           !this.config.intelligenceKey ||
           !this.config.apiKey ||
@@ -118,6 +139,14 @@ export class DotAgent extends AbstractAgent {
           dot.id,
         );
         const check = () => {
+          if (collaboration) {
+            assertCollaborationExecution(this.workspace, collaboration);
+            if (
+              this.workspace.collaboration.execution(collaboration.id)
+                ?.status !== 'running'
+            )
+              this.abortRun();
+          }
           const settings = this.store.settings();
           const current = this.workspace.dot(dot.id);
           if (
@@ -347,6 +376,8 @@ export class DotAgent extends AbstractAgent {
               messages: converted.messages,
               systemPrompts: [
                 prompt,
+                `Permanent SOUL instructions: ${this.workspace.dotProfile(dot.id).soulInstructions}`,
+                ...(collaborationContext ? [collaborationContext] : []),
                 ...converted.systemPrompts,
                 ...(ctx.learnedSkills.catalog
                   ? [ctx.learnedSkills.catalog]
@@ -440,6 +471,7 @@ export class DotAgent extends AbstractAgent {
         controller.abort();
         this.inner?.abortRun();
         subscription?.unsubscribe();
+        releaseThread?.();
       };
     });
   }
