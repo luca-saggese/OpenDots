@@ -521,7 +521,9 @@ export function Office({
     }
   };
   return (
-    <main className="main-content office-page">
+    <main
+      className={`main-content office-page ${project ? 'has-project' : ''}`}
+    >
       <div className="office-heading">
         <div>
           <span className="eyebrow">COLLABORATIVE DOTS WITH MEMORY</span>

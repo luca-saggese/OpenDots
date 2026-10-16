@@ -4630,6 +4630,11 @@ h3 {
   padding: 34px clamp(18px, 4vw, 52px) 60px;
   overflow: auto;
 }
+.main-content.office-page.has-project {
+  max-width: none;
+  margin: 0;
+  padding-inline: clamp(18px, 3vw, 48px);
+}
 .office-heading,
 .office-section-head {
   display: flex;
