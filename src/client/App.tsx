@@ -866,7 +866,6 @@ export function App() {
           <Office
             workspace={workspace}
             onRefresh={refresh}
-            onOpenSpace={(id) => openPage(id)}
             navigationRequest={officeNavigation}
             initialCollaboratorId={officeProfileDotId}
             profileSignal={officeProfileSignal}

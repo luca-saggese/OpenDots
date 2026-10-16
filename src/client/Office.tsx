@@ -86,7 +86,6 @@ const makeSlot = (position?: TeamTemplatePosition): Slot => ({
 export function Office({
   workspace,
   onRefresh,
-  onOpenSpace,
   navigationRequest,
   initialCollaboratorId,
   profileSignal,
@@ -100,7 +99,6 @@ export function Office({
 }: {
   workspace: WorkspaceState;
   onRefresh: () => Promise<void>;
-  onOpenSpace: (spaceId: string) => void;
   navigationRequest?: {
     projectId: string;
     conversationId?: string;
@@ -534,49 +532,6 @@ export function Office({
                 'Project overview and assigned collaborators.'
               : 'Your permanent collaborators and the projects they work on.'}
           </p>
-        </div>
-        <div className="office-actions">
-          {project && (
-            <>
-              <button
-                className="secondary-button"
-                onClick={() => setProjectTab('team')}
-              >
-                <Users size={16} />
-                Manage team
-              </button>
-              {kickoffConversationId && (
-                <button
-                  className="secondary-button"
-                  onClick={() => setProjectTab('conversations')}
-                >
-                  Open kickoff
-                </button>
-              )}
-              <button
-                className="secondary-button"
-                onClick={() => onOpenSpace(project.spaceId)}
-              >
-                <BriefcaseBusiness size={16} />
-                Open workspace
-              </button>
-            </>
-          )}
-          <button
-            className="secondary-button"
-            onClick={() => {
-              setProject(undefined);
-              onProjectChange(undefined);
-              setShowWizard(false);
-            }}
-          >
-            <Users size={16} />
-            My Office
-          </button>
-          <button className="primary" onClick={startWizard}>
-            <Plus size={16} />
-            Create project
-          </button>
         </div>
       </div>
       {error && (
