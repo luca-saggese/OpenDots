@@ -5422,21 +5422,57 @@ h3 {
 }
 .office-page.has-project .organizational-composer {
   flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 220px);
+  align-items: stretch;
   gap: 7px;
   padding: 10px;
 }
+.office-page.has-project .organizational-composer .mention-composer {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+}
+.office-page.has-project .organizational-composer-side-actions {
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  align-content: space-between;
+  justify-items: stretch;
+  gap: 10px;
+  min-width: 0;
+  padding: 2px 0;
+}
 .office-page.has-project .collaboration-controls {
-  flex: 0 0 auto;
-  padding: 8px 10px;
-  border-top: 0;
-  border-bottom: 1px solid var(--border);
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.office-page.has-project .collaboration-settings {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 0;
+}
+.office-page.has-project .collaboration-settings label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.office-page.has-project .collaboration-settings select {
+  width: 130px;
+}
+.office-page.has-project .collaboration-settings input {
+  width: 68px;
 }
 .office-page.has-project .organizational-composer textarea {
-  min-height: 64px;
+  min-height: 82px;
 }
 .office-page.has-project .publish-only {
-  width: fit-content;
+  width: auto;
   max-width: 100%;
+  align-items: flex-start;
 }
 .office-page.has-project .publish-only input {
   flex: 0 0 15px;
@@ -5446,15 +5482,11 @@ h3 {
   padding: 0;
 }
 .office-page.has-project .organizational-composer-actions {
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
+  grid-column: 1 / -1;
+  display: block;
 }
 .office-page.has-project .organizational-composer-actions small {
-  flex: 1 1 260px;
-}
-.office-page.has-project .organizational-composer-actions .primary {
-  flex: 0 0 auto;
+  display: block;
 }
 .office-page.has-project .conversation-participants {
   padding: 10px;
@@ -5968,6 +6000,24 @@ h3 {
   .office-page.has-project .conversation-main {
     height: calc(100dvh - 285px);
     min-height: 300px;
+  }
+  .office-page.has-project .organizational-composer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .office-page.has-project .organizational-composer .mention-composer,
+  .office-page.has-project .organizational-composer-side-actions,
+  .office-page.has-project .collaboration-controls,
+  .office-page.has-project .organizational-composer-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .office-page.has-project .organizational-composer-side-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .office-page.has-project .collaboration-settings {
+    overflow-x: auto;
   }
 }
 .secondary-button {

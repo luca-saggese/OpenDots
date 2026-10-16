@@ -524,6 +524,23 @@ export function ProjectConversations({
     }
   };
   const current = selected?.conversation;
+  const collaborationControls = current && (
+    <CollaborationControls
+      snapshot={snapshot}
+      name={(agentId) => {
+        const agent = agents.find((item) => item.id === agentId);
+        return (
+          roster.find((item) => item.dot.id === agent?.dotId)?.dot.name ??
+          'Collaborator'
+        );
+      }}
+      triggerMessageId={
+        messages.filter((message) => message.senderType === 'user').at(-1)?.id
+      }
+      onAction={participationAction}
+      onSettings={(settings) => participationAction('/collaboration', settings)}
+    />
+  );
   const activationNames = participants
     .filter(
       (participant) =>
@@ -664,25 +681,7 @@ export function ProjectConversations({
                 {notice}
               </p>
             )}
-            <CollaborationControls
-              snapshot={snapshot}
-              name={(agentId) => {
-                const agent = agents.find((item) => item.id === agentId);
-                return (
-                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
-                    .name ?? 'Collaborator'
-                );
-              }}
-              triggerMessageId={
-                messages
-                  .filter((message) => message.senderType === 'user')
-                  .at(-1)?.id
-              }
-              onAction={participationAction}
-              onSettings={(settings) =>
-                participationAction('/collaboration', settings)
-              }
-            />
+            {current.status !== 'active' && collaborationControls}
             <div className="organizational-messages" aria-live="polite">
               {hasOlder && (
                 <button
@@ -794,17 +793,27 @@ export function ProjectConversations({
                       : [];
                   })}
                 />
-                <label className="publish-only">
-                  <input
-                    type="checkbox"
-                    checked={publishOnly}
-                    onChange={(event) => {
-                      setPublishOnly(event.target.checked);
-                      setSendKey(undefined);
-                    }}
-                  />
-                  Publish without requesting responses
-                </label>
+                <div className="organizational-composer-side-actions">
+                  <label className="publish-only">
+                    <input
+                      type="checkbox"
+                      checked={publishOnly}
+                      onChange={(event) => {
+                        setPublishOnly(event.target.checked);
+                        setSendKey(undefined);
+                      }}
+                    />
+                    Publish without requesting responses
+                  </label>
+                  <button
+                    className="primary"
+                    disabled={!draft.trim() || sending}
+                  >
+                    <Send size={15} />
+                    {sending ? 'Publishing…' : 'Publish message'}
+                  </button>
+                </div>
+                {collaborationControls}
                 <div className="organizational-composer-actions">
                   <small>
                     {publishOnly
@@ -813,13 +822,6 @@ export function ProjectConversations({
                         ? `Requested: ${activationNames}.`
                         : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
                   </small>
-                  <button
-                    className="primary"
-                    disabled={!draft.trim() || sending}
-                  >
-                    <Send size={15} />
-                    {sending ? 'Publishing…' : 'Publish message'}
-                  </button>
                 </div>
               </form>
             )}
