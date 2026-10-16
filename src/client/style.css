@@ -5397,6 +5397,18 @@ h3 {
   min-height: 0;
   overflow: hidden;
 }
+.office-page.has-project .project-kickoff-card {
+  flex: 0 1 auto;
+  max-height: min(36%, 280px);
+  gap: 12px;
+  overflow: auto;
+  margin-bottom: 0;
+  padding: 14px;
+}
+.office-page.has-project .kickoff-agenda pre {
+  max-height: 145px;
+  overflow: auto;
+}
 .office-page.has-project .organizational-messages {
   flex: 1 1 0;
   gap: 8px;
