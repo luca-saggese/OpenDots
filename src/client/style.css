@@ -4684,6 +4684,46 @@ h3 {
 .office-card-title {
   align-items: center;
 }
+.office-project-member-title {
+  justify-content: space-between;
+  gap: 12px;
+}
+.office-project-member-identity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.office-project-member-identity > .mascot {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+}
+.office-project-member-identity > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.office-project-member-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+.office-member-icon-action {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--background);
+  color: var(--muted);
+}
+.office-member-icon-action:hover:not(:disabled),
+.office-member-icon-action:focus-visible {
+  background: var(--surface-raised, var(--surface));
+  color: var(--accent);
+}
 .office-card-title h3 {
   margin: 0;
   font-size: 17px;

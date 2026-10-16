@@ -4,8 +4,10 @@ import {
   BriefcaseBusiness,
   Check,
   ChevronRight,
+  MessageCircle,
   Plus,
   Search,
+  UserRound,
   Users,
   X,
 } from 'lucide-react';
@@ -679,18 +681,48 @@ export function Office({
                     person?.dot.name ?? agent.displayName ?? 'Collaborator';
                   return (
                     <article className="office-card" key={agent.id}>
-                      <div className="office-card-title">
-                        <Mascot
-                          identity={agent.dotId}
-                          name={name}
-                          small
-                          decorative
-                        />
-                        <div>
-                          <h3>{name}</h3>
-                          <small>
-                            {agent.role} · {agent.status}
-                          </small>
+                      <div className="office-card-title office-project-member-title">
+                        <div className="office-project-member-identity">
+                          <Mascot
+                            identity={agent.dotId}
+                            name={name}
+                            small
+                            decorative
+                          />
+                          <div>
+                            <h3>{name}</h3>
+                            <small>
+                              {agent.role} · {agent.status}
+                            </small>
+                          </div>
+                        </div>
+                        <div className="office-project-member-actions">
+                          <button
+                            className="office-member-icon-action"
+                            aria-label={`Talk with ${name}`}
+                            title={`Talk with ${name}`}
+                            onClick={() =>
+                              void onOpenDirect(project.id, agent.id)
+                            }
+                          >
+                            <MessageCircle size={16} aria-hidden="true" />
+                          </button>
+                          <button
+                            className="office-member-icon-action"
+                            aria-label={`Open ${name}'s collaborator profile`}
+                            title="Open collaborator profile"
+                            onClick={() => {
+                              if (!person) return;
+                              setSelectedDot(agent.dotId);
+                              setProfileDraft({
+                                summary: person.profile.summary,
+                                skills: person.profile.skills.join(', '),
+                                workStyle: person.profile.workStyle,
+                              });
+                            }}
+                          >
+                            <UserRound size={16} aria-hidden="true" />
+                          </button>
                         </div>
                       </div>
                       <p>
@@ -707,28 +739,6 @@ export function Office({
                         <b>Project mandate</b>
                         {agent.mandate}
                       </p>
-                      <button
-                        className="secondary-button"
-                        onClick={() => void onOpenDirect(project.id, agent.id)}
-                      >
-                        Talk with {name}
-                      </button>
-                      <button
-                        className="text-button"
-                        onClick={() => {
-                          setSelectedDot(agent.dotId);
-                          if (person)
-                            setProfileDraft({
-                              summary: person.profile.summary,
-                              skills: person.profile.skills.join(', '),
-                              workStyle: person.profile.workStyle,
-                            });
-                          setProject(undefined);
-                          onProjectChange(undefined);
-                        }}
-                      >
-                        Open collaborator profile <ChevronRight size={14} />
-                      </button>
                     </article>
                   );
                 })}
