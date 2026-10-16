@@ -3695,6 +3695,7 @@ h3 {
 .office-project-member {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   min-width: 0;
@@ -3713,10 +3714,11 @@ h3 {
 .office-project-member > .mascot.small {
   width: 25px;
   height: 25px;
-  flex: 0 0 auto;
+  flex: 0 0 25px;
 }
-.office-project-member > span {
+.office-project-member > span:not(.mascot) {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
   gap: 1px;
 }
