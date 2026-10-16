@@ -5279,6 +5279,60 @@ h3 {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.main-content.office-page.has-project {
+  padding-top: 22px;
+  padding-bottom: 32px;
+}
+.office-page.has-project > .office-heading {
+  margin-bottom: 16px;
+}
+.office-page.has-project .project-tabs {
+  margin: 0 0 14px;
+}
+.office-page.has-project .project-tabs button {
+  margin: 10px 0;
+  padding: 8px 12px;
+}
+.office-page.has-project .office-section-head {
+  margin: 20px 0 10px;
+}
+.office-page.has-project .office-roster-grid,
+.office-page.has-project .office-project-grid {
+  gap: 10px;
+}
+.office-page.has-project .office-card,
+.office-page.has-project .office-add-member {
+  padding: 14px;
+}
+.office-page.has-project .office-project-list {
+  margin-top: 12px;
+}
+.office-page.has-project .project-overview-stats {
+  gap: 10px;
+  margin: 14px 0;
+}
+.office-page.has-project .project-overview-stats article {
+  min-width: 130px;
+  padding: 12px;
+}
+.office-page.has-project .conversation-view-heading {
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.office-page.has-project .conversation-layout {
+  gap: 10px;
+}
+.office-page.has-project .organizational-messages {
+  gap: 8px;
+  padding: 12px;
+}
+.office-page.has-project .conversation-participants {
+  padding: 10px;
+}
+.office-page.has-project .conversation-participant {
+  gap: 6px;
+  padding: 9px 0;
+}
 .project-overview > p {
   color: var(--muted);
   max-width: 760px;
