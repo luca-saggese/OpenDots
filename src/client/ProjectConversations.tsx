@@ -554,7 +554,9 @@ export function ProjectConversations({
       <section className="project-conversation-view">
         <div className="conversation-view-heading">
           <button
-            className="secondary-button"
+            className="secondary-button conversation-back-button"
+            aria-label="Back to all conversations"
+            title="All conversations"
             onClick={() => {
               setSelected(undefined);
               activeConversation.current = undefined;
@@ -566,11 +568,9 @@ export function ProjectConversations({
           >
             <ArrowLeft size={15} />
           </button>
-          <div>
-            <span className="eyebrow">
-              ORGANIZATIONAL CONVERSATION · {current.kind}
-            </span>
-            <h2>{current.title}</h2>
+          <h2>{current.title}</h2>
+          <div className="conversation-view-heading-meta">
+            <span>{current.kind}</span>
             <small>
               {new Date(current.updatedAt).toLocaleString()} · {current.status}
             </small>

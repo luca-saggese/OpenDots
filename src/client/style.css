@@ -5414,15 +5414,46 @@ h3 {
 }
 .conversation-view-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 15px;
   margin-bottom: 17px;
 }
 .conversation-view-heading h2 {
-  margin: 4px 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: clamp(20px, 2.4vw, 28px);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.conversation-view-heading small {
+.conversation-back-button {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  padding: 0;
+  border-radius: 9px;
+}
+.conversation-view-heading-meta {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 2px;
+  max-width: 38%;
+  text-align: right;
+}
+.conversation-view-heading-meta > span {
+  overflow: hidden;
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.conversation-view-heading-meta small {
   color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 .conversation-layout {
   display: grid;
