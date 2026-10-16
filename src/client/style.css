@@ -5386,14 +5386,47 @@ h3 {
   margin: 4px 0 0;
 }
 .conversation-participant {
-  flex-wrap: wrap;
+  display: grid;
+  gap: 10px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
-.conversation-participant > div {
+.conversation-participant-identity {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+.conversation-participant-identity > .mascot.small,
+.conversation-participant-avatar {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+}
+.conversation-participant-identity > .mascot.small {
+  overflow: hidden;
+}
+.conversation-participant-avatar {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-raised, var(--background));
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 650;
+}
+.conversation-participant-details {
   display: grid;
   gap: 3px;
-  width: 100%;
+  min-width: 0;
+}
+.conversation-participant-details b,
+.conversation-participant-details small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .conversation-participant small,
 .participant-picker p,
@@ -5401,8 +5434,26 @@ h3 {
   color: var(--muted);
   font-size: 11px;
 }
-.conversation-participant select {
-  max-width: 120px;
+.conversation-participant-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 46px;
+}
+.conversation-participant-actions .conversation-participant-talk {
+  grid-column: 1 / -1;
+  justify-self: start;
+  max-width: 100%;
+}
+.conversation-participant-actions select {
+  width: 100%;
+  min-width: 0;
+  max-width: 150px;
+}
+.conversation-participant-actions .danger-text {
+  justify-self: end;
 }
 .participant-picker {
   display: grid;

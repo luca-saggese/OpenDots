@@ -25,6 +25,7 @@ import type {
 import type { DotProfile } from '../shared/types';
 import type { Dot } from '../shared/types';
 import { api } from './api';
+import { Mascot } from './Mascot';
 import {
   MentionComposer,
   CollaborationControls,
@@ -823,16 +824,33 @@ export function ProjectConversations({
                   className="conversation-participant"
                   key={participant.id}
                 >
-                  <div>
-                    <b>{participant.name}</b>
-                    <small>
-                      {participant.role} · {participant.status}
-                    </small>
+                  <div className="conversation-participant-identity">
+                    {agent ? (
+                      <Mascot
+                        identity={agent.dotId}
+                        name={participant.name}
+                        small
+                        decorative
+                      />
+                    ) : (
+                      <span
+                        className="conversation-participant-avatar"
+                        aria-hidden="true"
+                      >
+                        {participant.name.trim().charAt(0).toUpperCase() || '?'}
+                      </span>
+                    )}
+                    <span className="conversation-participant-details">
+                      <b>{participant.name}</b>
+                      <small>
+                        {participant.role} · {participant.status}
+                      </small>
+                    </span>
                   </div>
                   {agent && (
-                    <>
+                    <div className="conversation-participant-actions">
                       <button
-                        className="quiet-button"
+                        className="quiet-button conversation-participant-talk"
                         onClick={() => void openDirect(agent.id)}
                       >
                         Talk with {participant.name}
@@ -858,7 +876,7 @@ export function ProjectConversations({
                           Remove
                         </button>
                       )}
-                    </>
+                    </div>
                   )}
                 </article>
               );
