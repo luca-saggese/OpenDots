@@ -137,23 +137,29 @@ export function ProjectConversations({
         if (active) {
           setSnapshot(state);
           setParticipants(
-            detail.participants.map((participant) => {
-              const agent = agents.find(
-                (item) => item.id === participant.participantId,
-              );
-              const person =
-                agent && roster.find((item) => item.dot.id === agent.dotId);
-              return {
-                ...participant,
-                name:
-                  participant.participantType === 'user'
-                    ? 'You'
-                    : (person?.dot.name ??
-                      agent?.displayName ??
-                      'Collaborator'),
-                summary: person?.profile.summary ?? '',
-              };
-            }),
+            detail.participants
+              .map((participant) => {
+                const agent = agents.find(
+                  (item) => item.id === participant.participantId,
+                );
+                const person =
+                  agent && roster.find((item) => item.dot.id === agent.dotId);
+                return {
+                  ...participant,
+                  name:
+                    participant.participantType === 'user'
+                      ? 'You'
+                      : (person?.dot.name ??
+                        agent?.displayName ??
+                        'Collaborator'),
+                  summary: person?.profile.summary ?? '',
+                };
+              })
+              .sort(
+                (left, right) =>
+                  Number(right.participantType === 'user') -
+                  Number(left.participantType === 'user'),
+              ),
           );
           setMessages((previous) =>
             [
@@ -250,21 +256,27 @@ export function ProjectConversations({
         ),
       ]);
       if (activeConversation.current !== row.conversation.id) return;
-      const mapped = detail.participants.map((participant) => {
-        const agent = agents.find(
-          (item) => item.id === participant.participantId,
+      const mapped = detail.participants
+        .map((participant) => {
+          const agent = agents.find(
+            (item) => item.id === participant.participantId,
+          );
+          const person =
+            agent && roster.find((item) => item.dot.id === agent.dotId);
+          return {
+            ...participant,
+            name:
+              participant.participantType === 'user'
+                ? 'You'
+                : (person?.dot.name ?? agent?.displayName ?? 'Collaborator'),
+            summary: person?.profile.summary ?? '',
+          };
+        })
+        .sort(
+          (left, right) =>
+            Number(right.participantType === 'user') -
+            Number(left.participantType === 'user'),
         );
-        const person =
-          agent && roster.find((item) => item.dot.id === agent.dotId);
-        return {
-          ...participant,
-          name:
-            participant.participantType === 'user'
-              ? 'You'
-              : (person?.dot.name ?? agent?.displayName ?? 'Collaborator'),
-          summary: person?.profile.summary ?? '',
-        };
-      });
       setParticipants(mapped);
       setMessages(page);
       setHasOlder(page.length === PAGE_SIZE);
