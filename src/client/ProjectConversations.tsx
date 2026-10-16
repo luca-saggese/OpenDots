@@ -8,9 +8,11 @@ import {
 import {
   ArrowDown,
   ArrowLeft,
+  ChevronDown,
   MessageCircle,
   Plus,
   Send,
+  Trash2,
   Users,
   X,
 } from 'lucide-react';
@@ -851,29 +853,39 @@ export function ProjectConversations({
                     <div className="conversation-participant-actions">
                       <button
                         className="quiet-button conversation-participant-talk"
+                        aria-label={`Talk with ${participant.name}`}
+                        title={`Talk with ${participant.name}`}
                         onClick={() => void openDirect(agent.id)}
                       >
-                        Talk with {participant.name}
+                        <MessageCircle size={15} aria-hidden="true" />
                       </button>
                       {participant.role !== 'owner' && (
-                        <select
-                          aria-label={`Role for ${participant.name}`}
-                          value={participant.role}
-                          onChange={(event) =>
-                            void updateRole(agent.id, event.target.value)
-                          }
-                        >
-                          <option value="participant">Participant</option>
-                          <option value="moderator">Moderator</option>
-                          <option value="observer">Observer</option>
-                        </select>
+                        <label className="conversation-role-field">
+                          <span>Role</span>
+                          <span className="conversation-role-select">
+                            <select
+                              aria-label={`Role for ${participant.name}`}
+                              value={participant.role}
+                              onChange={(event) =>
+                                void updateRole(agent.id, event.target.value)
+                              }
+                            >
+                              <option value="participant">Participant</option>
+                              <option value="moderator">Moderator</option>
+                              <option value="observer">Observer</option>
+                            </select>
+                            <ChevronDown size={14} aria-hidden="true" />
+                          </span>
+                        </label>
                       )}
                       {participant.role !== 'owner' && (
                         <button
-                          className="quiet-button danger-text"
+                          className="quiet-button danger-text conversation-participant-remove"
+                          aria-label={`Remove ${participant.name}`}
+                          title={`Remove ${participant.name}`}
                           onClick={() => void removeParticipant(agent.id)}
                         >
-                          Remove
+                          <Trash2 size={15} aria-hidden="true" />
                         </button>
                       )}
                     </div>

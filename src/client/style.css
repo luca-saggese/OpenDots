@@ -5436,24 +5436,66 @@ h3 {
 }
 .conversation-participant-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
   align-items: center;
   gap: 6px;
   min-width: 0;
   padding-left: 46px;
 }
 .conversation-participant-actions .conversation-participant-talk {
-  grid-column: 1 / -1;
-  justify-self: start;
-  max-width: 100%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: inherit;
 }
-.conversation-participant-actions select {
+.conversation-role-field {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 550;
+}
+.conversation-role-select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.conversation-role-select select {
   width: 100%;
   min-width: 0;
-  max-width: 150px;
+  padding: 6px 27px 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  appearance: none;
+  background: var(--background);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.conversation-role-select > svg {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 .conversation-participant-actions .danger-text {
+  width: 32px;
+  height: 32px;
   justify-self: end;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, #a53636 22%, var(--border));
+  border-radius: 8px;
+  background: var(--background);
+}
+.conversation-participant-actions .danger-text:hover:not(:disabled) {
+  background: color-mix(in srgb, #a53636 8%, var(--background));
 }
 .participant-picker {
   display: grid;
