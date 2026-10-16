@@ -93,6 +93,10 @@ export function ProjectConversations({
   const [title, setTitle] = useState('');
   const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
   const [showAddParticipant, setShowAddParticipant] = useState(false);
+  const [roleParticipant, setRoleParticipant] =
+    useState<ParticipantView | null>(null);
+  const [roleDraft, setRoleDraft] = useState('participant');
+  const [savingRole, setSavingRole] = useState(false);
   const [mentions, setMentions] = useState<CollaborationMention[]>([]);
   const [publishOnly, setPublishOnly] = useState(false);
   const [snapshot, setSnapshot] = useState<CollaborationSnapshot>();
@@ -499,7 +503,7 @@ export function ProjectConversations({
     }
   };
   const updateRole = async (agentId: string, role: string) => {
-    if (!selected) return;
+    if (!selected) return false;
     setError('');
     try {
       await api(
@@ -508,12 +512,15 @@ export function ProjectConversations({
         { role },
       );
       await openConversation(selected);
+      setRoleParticipant(null);
+      return true;
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
           : 'Could not update participant role.',
       );
+      return false;
     }
   };
   const current = selected?.conversation;
@@ -860,7 +867,29 @@ export function ProjectConversations({
                     )}
                     <span className="conversation-participant-details">
                       <b>{participant.name}</b>
-                      <small>{participant.status}</small>
+                      <span className="conversation-participant-status">
+                        <small>{participant.status}</small>
+                        {agent?.status === 'active' &&
+                        participant.role !== 'owner' ? (
+                          <button
+                            type="button"
+                            className="conversation-role-badge"
+                            aria-label={`Change role for ${participant.name}`}
+                            title="Change conversation role"
+                            onClick={() => {
+                              setRoleDraft(participant.role);
+                              setRoleParticipant(participant);
+                            }}
+                          >
+                            {participant.role}
+                            <ChevronDown size={12} aria-hidden="true" />
+                          </button>
+                        ) : (
+                          <span className="conversation-role-badge is-static">
+                            {participant.role}
+                          </span>
+                        )}
+                      </span>
                     </span>
                   </div>
                   {agent && (
@@ -885,33 +914,84 @@ export function ProjectConversations({
                       )}
                     </div>
                   )}
-                  <div className="conversation-participant-role">
-                    <span>Role</span>
-                    {agent && participant.role !== 'owner' ? (
-                      <span className="conversation-role-select">
-                        <select
-                          aria-label={`Role for ${participant.name}`}
-                          value={participant.role}
-                          onChange={(event) =>
-                            void updateRole(agent.id, event.target.value)
-                          }
-                        >
-                          <option value="participant">Participant</option>
-                          <option value="moderator">Moderator</option>
-                          <option value="observer">Observer</option>
-                        </select>
-                        <ChevronDown size={14} aria-hidden="true" />
-                      </span>
-                    ) : (
-                      <b>
-                        {participant.role.charAt(0).toUpperCase() +
-                          participant.role.slice(1)}
-                      </b>
-                    )}
-                  </div>
                 </article>
               );
             })}
+            {roleParticipant && selected && (
+              <div
+                className="modal-backdrop"
+                onClick={() => !savingRole && setRoleParticipant(null)}
+              >
+                <section
+                  className="modal office-modal conversation-role-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="conversation-role-title"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <button
+                    className="modal-close icon-button"
+                    aria-label="Close role editor"
+                    disabled={savingRole}
+                    onClick={() => setRoleParticipant(null)}
+                  >
+                    <X size={17} />
+                  </button>
+                  <span className="eyebrow">CONVERSATION ACCESS</span>
+                  <h2 id="conversation-role-title">
+                    Change {roleParticipant.name}’s role
+                  </h2>
+                  <p className="muted">
+                    The role controls what this participant can do in this
+                    conversation.
+                  </p>
+                  <label
+                    className="field-label"
+                    htmlFor="conversation-role-choice"
+                  >
+                    Role
+                  </label>
+                  <select
+                    id="conversation-role-choice"
+                    value={roleDraft}
+                    disabled={savingRole}
+                    onChange={(event) => setRoleDraft(event.target.value)}
+                  >
+                    <option value="participant">Participant</option>
+                    <option value="moderator">Moderator</option>
+                    <option value="observer">Observer</option>
+                  </select>
+                  <div className="office-modal-actions">
+                    <button
+                      className="secondary-button"
+                      disabled={savingRole}
+                      onClick={() => setRoleParticipant(null)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="primary"
+                      disabled={
+                        savingRole || roleDraft === roleParticipant.role
+                      }
+                      onClick={async () => {
+                        const agent = agents.find(
+                          (item) =>
+                            item.id === roleParticipant.participantId &&
+                            item.status === 'active',
+                        );
+                        if (!agent) return;
+                        setSavingRole(true);
+                        await updateRole(agent.id, roleDraft);
+                        setSavingRole(false);
+                      }}
+                    >
+                      {savingRole ? 'Saving…' : 'Save role'}
+                    </button>
+                  </div>
+                </section>
+              </div>
+            )}
             {showAddParticipant && (
               <div className="participant-picker">
                 <div>
