@@ -5409,9 +5409,8 @@ h3 {
   margin-bottom: 0;
   padding: 14px;
 }
-.office-page.has-project .kickoff-agenda pre {
-  max-height: 145px;
-  overflow: auto;
+.office-page.has-project .organizational-messages > .kickoff-agenda.is-empty {
+  flex: 1 0 auto;
 }
 .office-page.has-project .organizational-messages {
   flex: 1 1 0;

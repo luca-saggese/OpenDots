@@ -99,6 +99,7 @@ export function ProjectConversations({
   const [savingRole, setSavingRole] = useState(false);
   const [mentions, setMentions] = useState<CollaborationMention[]>([]);
   const [publishOnly, setPublishOnly] = useState(false);
+  const [kickoffAgendaExpanded, setKickoffAgendaExpanded] = useState(false);
   const [snapshot, setSnapshot] = useState<CollaborationSnapshot>();
   const [sendKey, setSendKey] = useState<string>();
   const selectedId = selected?.conversation.id;
@@ -110,6 +111,7 @@ export function ProjectConversations({
     setDraft('');
     setSendKey(undefined);
     setPublishOnly(false);
+    setKickoffAgendaExpanded(false);
     if (!selectedId) return;
     let active = true;
     let pending = false;
@@ -524,6 +526,14 @@ export function ProjectConversations({
     }
   };
   const current = selected?.conversation;
+  const visibleMessages = current
+    ? messages.filter(
+        (message) =>
+          current.id !== kickoffConversationId ||
+          message.idempotencyKey !== `kickoff-agenda:${masterSessionId}`,
+      )
+    : [];
+  const hasVisibleMessages = visibleMessages.length > 0;
   const collaborationControls = current && (
     <CollaborationControls
       snapshot={snapshot}
@@ -644,10 +654,6 @@ export function ProjectConversations({
                       })}
                   </div>
                 </div>
-                <details className="kickoff-agenda" open>
-                  <summary>Proposed agenda</summary>
-                  <pre>{kickoffAgenda}</pre>
-                </details>
                 {kickoffStarted ? (
                   <p className="kickoff-feedback" role="status">
                     {kickoffTargets.length
@@ -683,6 +689,24 @@ export function ProjectConversations({
             )}
             {current.status !== 'active' && collaborationControls}
             <div className="organizational-messages" aria-live="polite">
+              {current.id === kickoffConversationId &&
+                (hasVisibleMessages ? (
+                  <details
+                    className="kickoff-agenda in-history"
+                    open={kickoffAgendaExpanded}
+                    onToggle={(event) =>
+                      setKickoffAgendaExpanded(event.currentTarget.open)
+                    }
+                  >
+                    <summary>Kickoff agenda</summary>
+                    <pre>{kickoffAgenda}</pre>
+                  </details>
+                ) : (
+                  <section className="kickoff-agenda is-empty">
+                    <b>Proposed agenda</b>
+                    <pre>{kickoffAgenda}</pre>
+                  </section>
+                ))}
               {hasOlder && (
                 <button
                   className="secondary-button load-older"
@@ -696,65 +720,53 @@ export function ProjectConversations({
               {loadingMessages && !messages.length ? (
                 <p className="muted">Loading authorized message history…</p>
               ) : (
-                messages
-                  .filter(
-                    (message) =>
-                      current.id !== kickoffConversationId ||
-                      message.idempotencyKey !==
-                        `kickoff-agenda:${masterSessionId}`,
-                  )
-                  .map((message) => {
-                    const participant = participants.find(
-                      (person) => person.participantId === message.senderId,
-                    );
-                    const agent = agents.find(
-                      (person) => person.id === message.senderId,
-                    );
-                    const dot =
-                      agent &&
-                      roster.find((person) => person.dot.id === agent.dotId)
-                        ?.dot;
-                    return (
-                      <article
-                        className={`organizational-message ${message.senderType === 'user' ? 'from-user' : ''}`}
-                        key={message.id}
-                      >
-                        <div>
-                          <b>
-                            {message.senderType === 'user'
-                              ? 'You'
-                              : (participant?.name ??
-                                dot?.name ??
-                                agent?.displayName ??
-                                'Collaborator')}
-                          </b>
-                          <time
-                            dateTime={new Date(message.createdAt).toISOString()}
-                          >
-                            {new Date(message.createdAt).toLocaleString()}
-                          </time>
-                        </div>
-                        <p>{message.content}</p>
-                        {agent && (
-                          <small>
-                            {agent.role} ·{' '}
-                            {snapshot?.executions.find(
-                              (execution) =>
-                                execution.threadId === message.sourceThreadId,
-                            )?.status ?? 'published'}
-                          </small>
-                        )}
-                      </article>
-                    );
-                  })
+                visibleMessages.map((message) => {
+                  const participant = participants.find(
+                    (person) => person.participantId === message.senderId,
+                  );
+                  const agent = agents.find(
+                    (person) => person.id === message.senderId,
+                  );
+                  const dot =
+                    agent &&
+                    roster.find((person) => person.dot.id === agent.dotId)?.dot;
+                  return (
+                    <article
+                      className={`organizational-message ${message.senderType === 'user' ? 'from-user' : ''}`}
+                      key={message.id}
+                    >
+                      <div>
+                        <b>
+                          {message.senderType === 'user'
+                            ? 'You'
+                            : (participant?.name ??
+                              dot?.name ??
+                              agent?.displayName ??
+                              'Collaborator')}
+                        </b>
+                        <time
+                          dateTime={new Date(message.createdAt).toISOString()}
+                        >
+                          {new Date(message.createdAt).toLocaleString()}
+                        </time>
+                      </div>
+                      <p>{message.content}</p>
+                      {agent && (
+                        <small>
+                          {agent.role} ·{' '}
+                          {snapshot?.executions.find(
+                            (execution) =>
+                              execution.threadId === message.sourceThreadId,
+                          )?.status ?? 'published'}
+                        </small>
+                      )}
+                    </article>
+                  );
+                })
               )}
               {!loadingMessages &&
-                !messages.some(
-                  (message) =>
-                    current.id !== kickoffConversationId ||
-                    message.idempotencyKey !==
-                      `kickoff-agenda:${masterSessionId}`,
-                ) && (
+                !hasVisibleMessages &&
+                current.id !== kickoffConversationId && (
                   <div className="conversation-empty">
                     <MessageCircle size={26} />
                     <p>No messages yet. Your message will be recorded here.</p>
