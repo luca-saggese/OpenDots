@@ -859,6 +859,7 @@ export function App() {
             workspace={workspace}
             onRefresh={refresh}
             onChatDot={(id) => void startDotChat(id)}
+            onOpenSpace={(id) => openPage(id)}
           />
         ) : (
           <main className="main-content">

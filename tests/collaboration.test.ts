@@ -163,6 +163,54 @@ function fixture(
   };
 }
 
+it('starts a persistent kickoff only on request, respects the activation cap, and retries idempotently without a Director', async () => {
+  const f = fixture();
+  const initialized = f.workspace.initializeProjectKickoff(
+    f.master.id,
+    f.workspace.ownerId,
+  );
+  expect(initialized.conversation.title).toBe('Kickoff — Project Orion');
+  expect(f.runtime.turn).not.toHaveBeenCalled();
+  expect(
+    f.workspace.collaboration.executions(initialized.conversation.id),
+  ).toHaveLength(0);
+  f.service.settings(initialized.conversation.id, {
+    mode: 'manual',
+    maxActivations: 2,
+    evaluationBudget: 2,
+  });
+
+  const startPath = `/api/office/projects/${f.master.id}/kickoff/start`;
+  const firstResponse = await f.app.request(startPath, request({}));
+  expect(firstResponse.status).toBe(202);
+  const first = await firstResponse.json();
+  expect(first.started).toBe(true);
+  expect(first.targets).toHaveLength(2);
+  await f.service.idle();
+
+  const executions = f.workspace.collaboration.executions(
+    initialized.conversation.id,
+  );
+  expect(f.runtime.turn).toHaveBeenCalledTimes(2);
+  expect(executions).toHaveLength(2);
+  for (const execution of executions) {
+    const agent = f.workspace.sessionAgent(execution.sessionAgentId);
+    expect(agent?.status).toBe('active');
+    expect(agent?.masterSessionId).toBe(f.master.id);
+    expect(agent?.dotId).toBe(execution.dotId);
+    expect(execution.status).toBe('succeeded');
+  }
+
+  const retryResponse = await f.app.request(startPath, request({}));
+  const retry = await retryResponse.json();
+  expect(retryResponse.status).toBe(202);
+  expect(retry.message.id).toBe(first.message.id);
+  expect(f.runtime.turn).toHaveBeenCalledTimes(2);
+  expect(
+    f.workspace.collaboration.executions(initialized.conversation.id),
+  ).toHaveLength(2);
+});
+
 it('renames a permanent Dot through the API without changing its identity or other projects', async () => {
   const f = fixture();
   const second = f.workspace.createSpace('Other', 'Second project');

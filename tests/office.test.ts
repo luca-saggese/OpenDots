@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, expect, it } from 'vitest';
 import { WorkspaceStore } from '../src/server/workspace.js';
 import { Store } from '../src/server/store.js';
@@ -52,6 +53,13 @@ it('seeds versioned member and team templates idempotently and keeps the catalog
     expect(workspace.memberTemplates()).toHaveLength(beforeMembers.length);
     expect(workspace.teamTemplates()).toHaveLength(beforeTeams.length);
     expect(workspace.memberTemplate('aerospace-engineer')).toBeDefined();
+    expect(workspace.memberTemplate('director')?.version).toBeGreaterThan(1);
+    expect(
+      workspace.memberTemplate('director')?.agentInstructions.length,
+    ).toBeGreaterThan(200);
+    expect(
+      workspace.memberTemplate('director')?.soulInstructions.length,
+    ).toBeGreaterThan(200);
     workspace.close();
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -68,7 +76,7 @@ it('seeds versioned member and team templates idempotently and keeps the catalog
   ).toContain('aerospace-engineer');
 });
 
-it('creates a permanent Dot from a Member Template with explicit AGENT and SOUL customization', async () => {
+it('creates a permanent Dot from a Member Template with customization separate from SOUL', async () => {
   const { app, workspace } = fixture();
   const response = await app.request(
     '/api/office/dots/from-template',
@@ -82,9 +90,118 @@ it('creates a permanent Dot from a Member Template with explicit AGENT and SOUL 
   const result = await response.json();
   expect(result.dot.instructions).toContain('Permanent owner customization');
   expect(result.dot.instructions).toContain('rain-soaked');
-  expect(result.profile.soulInstructions).toContain('rain-soaked');
+  expect(result.profile.soulInstructions).not.toContain('rain-soaked');
+  expect(result.profile.soulInstructions).toContain('imaginative and curious');
   expect(result.profile.skills).toContain('continuity');
   expect(workspace.dot(result.dot.id)).toEqual(result.dot);
+});
+
+it('saves wizard AGENT and SOUL edits separately from project mandate and keeps archetype origin', async () => {
+  const { app, workspace } = fixture();
+  const response = await app.request(
+    '/api/office/projects',
+    post({
+      creationKey: 'edited-template-project',
+      name: 'Edited Template Project',
+      description: '',
+      team: [
+        {
+          id: 'edited-dot',
+          memberTemplateId: 'researcher',
+          name: 'Quinn',
+          role: 'Evidence Lead',
+          mandate: 'Prepare findings for the kickoff.',
+          agentInstructions:
+            'Use a source matrix, record publication dates, and flag conflicting evidence.',
+          soulInstructions:
+            'Be patient, intellectually honest, and willing to change your view.',
+          customization: 'Prioritize accessible primary sources.',
+        },
+      ],
+    }),
+  );
+  expect(response.status).toBe(201);
+  const result = await response.json();
+  const dot = result.dots.find(
+    (item: { name: string }) => item.name === 'Quinn',
+  );
+  const profile = workspace.dotProfile(dot.id);
+  expect(dot.instructions).toContain('source matrix');
+  expect(dot.instructions).toContain('Prioritize accessible primary sources.');
+  expect(profile.soulInstructions).toBe(
+    'Be patient, intellectually honest, and willing to change your view.',
+  );
+  expect(profile.memberTemplateId).toBe('researcher');
+  expect(result.agents[0].mandate).toBe('Prepare findings for the kickoff.');
+  expect(dot.instructions).not.toContain(result.agents[0].mandate);
+});
+
+it('initializes one authorized kickoff with a persisted agenda and no activation', async () => {
+  const { app, workspace } = fixture();
+  const created = await app.request(
+    '/api/office/projects',
+    post({
+      creationKey: 'kickoff-project',
+      name: 'Orbital Research',
+      description: 'Assess whether a small orbital lab is viable.',
+      team: [
+        {
+          memberTemplateId: 'researcher',
+          name: 'Iris',
+          role: 'Research Lead',
+          mandate: 'Assess mission feasibility.',
+        },
+        {
+          memberTemplateId: 'aerospace-engineer',
+          name: 'Aster',
+          role: 'Flight Engineer',
+          mandate: 'Identify flight-system constraints.',
+        },
+      ],
+    }),
+  );
+  const project = await created.json();
+  const initPath = `/api/office/projects/${project.masterSession.id}/kickoff`;
+  const firstResponse = await app.request(initPath, post({}, 'PUT'));
+  const secondResponse = await app.request(initPath, post({}, 'PUT'));
+  const [first, second] = await Promise.all([
+    firstResponse.json(),
+    secondResponse.json(),
+  ]);
+  expect(firstResponse.status).toBe(200);
+  expect(secondResponse.status).toBe(200);
+  expect(second.conversation.id).toBe(first.conversation.id);
+  expect(first.conversation.title).toBe('Kickoff — Orbital Research');
+  expect(first.agenda).toContain(
+    'Assess whether a small orbital lab is viable.',
+  );
+  expect(first.agenda).toContain(
+    'Iris · Research Lead: Assess mission feasibility.',
+  );
+  expect(first.agenda).toContain('Aster · Flight Engineer');
+  const participants = workspace.conversationParticipants(
+    first.conversation.id,
+  );
+  expect(
+    participants.map((item) => `${item.participantType}:${item.participantId}`),
+  ).toEqual(
+    expect.arrayContaining([
+      `user:${workspace.ownerId}`,
+      ...project.agents.map(
+        (agent: { id: string }) => `session_agent:${agent.id}`,
+      ),
+    ]),
+  );
+  expect(
+    workspace.listConversationMessagesForUser(
+      first.conversation.id,
+      workspace.ownerId,
+    ),
+  ).toHaveLength(1);
+  expect(
+    workspace.collaboration.executions(first.conversation.id),
+  ).toHaveLength(0);
+  expect(workspace.masterSession(project.masterSession.id)).toBeDefined();
 });
 
 it('creates and reuses a permanent Dot across projects without changing its instructions', async () => {
@@ -221,6 +338,14 @@ it('rejects invalid project templates without side effects and protects Office A
   const { app, workspace } = fixture(':memory:', 'secret');
   const denied = await app.request('/api/office/team-templates');
   expect(denied.status).toBe(401);
+  expect(
+    (await app.request('/api/office/projects/project/kickoff', post({}, 'PUT')))
+      .status,
+  ).toBe(401);
+  expect(
+    (await app.request('/api/office/projects/project/kickoff/start', post({})))
+      .status,
+  ).toBe(401);
   const beforeSpaces = workspace.spaces().length;
   const failed = await app.request('/api/office/projects', {
     ...post(
@@ -279,8 +404,16 @@ it('persists templates, profiles, projects, and assignments after reopening SQLi
         },
       ],
     });
+    const kickoff = workspace.initializeProjectKickoff(
+      project.masterSession.id,
+      workspace.ownerId,
+    );
     workspace.close();
     workspace = new WorkspaceStore(path, 'owner');
+    const recoveredKickoff = workspace.initializeProjectKickoff(
+      project.masterSession.id,
+      workspace.ownerId,
+    );
     expect(workspace.memberTemplate('philosopher')).toBeDefined();
     expect(workspace.dotProfile(dot.id).summary).toBe('A project philosopher.');
     expect(workspace.masterSession(project.masterSession.id)?.name).toBe(
@@ -288,6 +421,47 @@ it('persists templates, profiles, projects, and assignments after reopening SQLi
     );
     expect(workspace.sessionAgents(project.masterSession.id)[0].dotId).toBe(
       dot.id,
+    );
+    expect(recoveredKickoff.conversation.id).toBe(kickoff.conversation.id);
+    expect(recoveredKickoff.agenda).toBe(kickoff.agenda);
+    expect(
+      workspace.listConversationsForOwner(
+        project.masterSession.id,
+        workspace.ownerId,
+      ),
+    ).toHaveLength(1);
+  } finally {
+    workspace.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+it('refreshes older template versions on startup without overwriting permanent Dot instructions', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'opendots-template-upgrade-'));
+  const path = join(directory, 'workspace.sqlite');
+  let workspace = new WorkspaceStore(path, 'owner');
+  try {
+    const { dot } = workspace.createDotFromMemberTemplate({
+      memberTemplateId: 'software-developer',
+      name: 'Mira',
+    });
+    const originalInstructions = dot.instructions;
+    workspace.close();
+
+    const db = new DatabaseSync(path);
+    db.prepare(
+      'UPDATE member_templates SET version=1,agentInstructions=?,soulInstructions=? WHERE id=?',
+    ).run('Old generic AGENT', 'Old generic SOUL', 'software-developer');
+    db.close();
+
+    workspace = new WorkspaceStore(path, 'owner');
+    expect(workspace.memberTemplate('software-developer')?.version).toBe(2);
+    expect(
+      workspace.memberTemplate('software-developer')?.agentInstructions,
+    ).not.toBe('Old generic AGENT');
+    expect(workspace.dot(dot.id)?.instructions).toBe(originalInstructions);
+    expect(workspace.dotProfile(dot.id).soulInstructions).toContain(
+      'practical, curious, and careful',
     );
   } finally {
     workspace.close();

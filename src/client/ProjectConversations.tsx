@@ -50,11 +50,21 @@ export function ProjectConversations({
   masterSessionId,
   agents,
   roster,
+  kickoffConversationId,
+  kickoffAgenda,
+  kickoffStarted,
+  kickoffTargets,
+  onStartKickoff,
   onChatDot,
 }: {
   masterSessionId: string;
   agents: SessionAgent[];
   roster: Person[];
+  kickoffConversationId?: string;
+  kickoffAgenda: string;
+  kickoffStarted: boolean;
+  kickoffTargets: string[];
+  onStartKickoff: () => Promise<string[]>;
   onChatDot: (dotId: string) => void;
 }) {
   const [rows, setRows] = useState<Summary[]>([]);
@@ -65,6 +75,7 @@ export function ProjectConversations({
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [startingKickoff, setStartingKickoff] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -166,7 +177,7 @@ export function ProjectConversations({
       clearInterval(timer);
       controller.abort();
     };
-  }, [selectedId]);
+  }, [selectedId, kickoffConversationId]);
   const participationAction = async (path: string, body: unknown) => {
     if (!selectedId) return;
     setError('');
@@ -210,7 +221,6 @@ export function ProjectConversations({
     setLoading(true);
     void loadRows();
   }, [loadRows]);
-
   const openConversation = async (row: Summary) => {
     activeConversation.current = row.conversation.id;
     setError('');
@@ -261,6 +271,35 @@ export function ProjectConversations({
         setLoadingMessages(false);
     }
   };
+  const startKickoff = async () => {
+    if (!kickoffConversationId || kickoffStarted || startingKickoff) return;
+    setStartingKickoff(true);
+    setError('');
+    setNotice('');
+    try {
+      const targets = await onStartKickoff();
+      setNotice(
+        targets.length
+          ? `Kickoff started. OpenDots requested contributions from ${targets.join(', ')}. Their execution status appears below.`
+          : 'Kickoff started. Execution status appears below.',
+      );
+      await loadRows();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'Could not start the kickoff.',
+      );
+    } finally {
+      setStartingKickoff(false);
+    }
+  };
+  useEffect(() => {
+    if (!kickoffConversationId || !rows.length) return;
+    const kickoff = rows.find(
+      (row) => row.conversation.id === kickoffConversationId,
+    );
+    if (kickoff && selectedId !== kickoffConversationId)
+      void openConversation(kickoff);
+  }, [rows, kickoffConversationId, selectedId, openConversation]);
   const createConversation = async () => {
     setError('');
     setNotice('');
@@ -498,6 +537,64 @@ export function ProjectConversations({
         </div>
         <div className="conversation-layout">
           <div className="conversation-main">
+            {current.id === kickoffConversationId && (
+              <section className="project-kickoff-card">
+                <div className="project-kickoff-heading">
+                  <div>
+                    <span className="eyebrow">PROJECT KICKOFF</span>
+                    <h3>Ready to begin</h3>
+                  </div>
+                  <span
+                    className={`project-status ${kickoffStarted ? 'active' : 'ready'}`}
+                  >
+                    {kickoffStarted ? 'Started' : 'Ready'}
+                  </span>
+                </div>
+                <div className="kickoff-participants">
+                  <b>Project collaborators</b>
+                  <div>
+                    {participants
+                      .filter(
+                        (participant) =>
+                          participant.participantType === 'session_agent',
+                      )
+                      .map((participant) => {
+                        const agent = agents.find(
+                          (item) => item.id === participant.participantId,
+                        );
+                        const person =
+                          agent &&
+                          roster.find((item) => item.dot.id === agent.dotId);
+                        return (
+                          <span key={participant.id}>
+                            {person?.dot.name ?? participant.name} ·{' '}
+                            {agent?.role ?? 'Collaborator'}
+                          </span>
+                        );
+                      })}
+                  </div>
+                </div>
+                <details className="kickoff-agenda" open>
+                  <summary>Proposed agenda</summary>
+                  <pre>{kickoffAgenda}</pre>
+                </details>
+                {kickoffStarted ? (
+                  <p className="kickoff-feedback" role="status">
+                    {kickoffTargets.length
+                      ? `Requested: ${kickoffTargets.join(', ')}. Follow their execution status below. This conversation stays available to continue or resume the discussion.`
+                      : 'Kickoff activation was already requested. Follow execution status below or continue the persistent conversation.'}
+                  </p>
+                ) : (
+                  <button
+                    className="primary"
+                    disabled={startingKickoff || loadingMessages}
+                    onClick={() => void startKickoff()}
+                  >
+                    {startingKickoff ? 'Starting kickoff…' : 'Avvia kickoff'}
+                  </button>
+                )}
+              </section>
+            )}
             {current.status !== 'active' && (
               <p className="notice">
                 This conversation is {current.status} and cannot receive new
@@ -528,49 +625,57 @@ export function ProjectConversations({
               {loadingMessages && !messages.length ? (
                 <p className="muted">Loading authorized message history…</p>
               ) : (
-                messages.map((message) => {
-                  const participant = participants.find(
-                    (person) => person.participantId === message.senderId,
-                  );
-                  const agent = agents.find(
-                    (person) => person.id === message.senderId,
-                  );
-                  const dot =
-                    agent &&
-                    roster.find((person) => person.dot.id === agent.dotId)?.dot;
-                  return (
-                    <article
-                      className={`organizational-message ${message.senderType === 'user' ? 'from-user' : ''}`}
-                      key={message.id}
-                    >
-                      <div>
-                        <b>
-                          {message.senderType === 'user'
-                            ? 'You'
-                            : (participant?.name ??
-                              dot?.name ??
-                              agent?.displayName ??
-                              'Collaborator')}
-                        </b>
-                        <time
-                          dateTime={new Date(message.createdAt).toISOString()}
-                        >
-                          {new Date(message.createdAt).toLocaleString()}
-                        </time>
-                      </div>
-                      <p>{message.content}</p>
-                      {agent && (
-                        <small>
-                          {agent.role} ·{' '}
-                          {snapshot?.executions.find(
-                            (execution) =>
-                              execution.threadId === message.sourceThreadId,
-                          )?.status ?? 'published'}
-                        </small>
-                      )}
-                    </article>
-                  );
-                })
+                messages
+                  .filter(
+                    (message) =>
+                      current.id !== kickoffConversationId ||
+                      message.idempotencyKey !==
+                        `kickoff-agenda:${masterSessionId}`,
+                  )
+                  .map((message) => {
+                    const participant = participants.find(
+                      (person) => person.participantId === message.senderId,
+                    );
+                    const agent = agents.find(
+                      (person) => person.id === message.senderId,
+                    );
+                    const dot =
+                      agent &&
+                      roster.find((person) => person.dot.id === agent.dotId)
+                        ?.dot;
+                    return (
+                      <article
+                        className={`organizational-message ${message.senderType === 'user' ? 'from-user' : ''}`}
+                        key={message.id}
+                      >
+                        <div>
+                          <b>
+                            {message.senderType === 'user'
+                              ? 'You'
+                              : (participant?.name ??
+                                dot?.name ??
+                                agent?.displayName ??
+                                'Collaborator')}
+                          </b>
+                          <time
+                            dateTime={new Date(message.createdAt).toISOString()}
+                          >
+                            {new Date(message.createdAt).toLocaleString()}
+                          </time>
+                        </div>
+                        <p>{message.content}</p>
+                        {agent && (
+                          <small>
+                            {agent.role} ·{' '}
+                            {snapshot?.executions.find(
+                              (execution) =>
+                                execution.threadId === message.sourceThreadId,
+                            )?.status ?? 'published'}
+                          </small>
+                        )}
+                      </article>
+                    );
+                  })
               )}
               {!loadingMessages && !messages.length && (
                 <div className="conversation-empty">

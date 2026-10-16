@@ -58,6 +58,75 @@ export class CollaborationService {
       )
       .sort((a, b) => a.id.localeCompare(b.id));
   }
+  startProjectKickoff(masterSessionId: string) {
+    const kickoff = this.workspace.initializeProjectKickoff(
+      masterSessionId,
+      this.workspace.ownerId,
+    );
+    const previousMessage = this.workspace
+      .listConversationMessagesForUser(
+        kickoff.conversation.id,
+        this.workspace.ownerId,
+      )
+      .find(
+        (message) =>
+          message.idempotencyKey === `kickoff-start:${masterSessionId}`,
+      );
+    if (kickoff.started && previousMessage) {
+      const mentions =
+        this.workspace.collaboration.command(previousMessage.id)?.mentions ??
+        [];
+      return {
+        ...kickoff,
+        message: previousMessage,
+        targets: mentions.flatMap((mention) => {
+          if (mention.type !== 'agent') return [];
+          const agent = this.workspace.sessionAgent(mention.sessionAgentId);
+          const dot = agent && this.workspace.dot(agent.dotId);
+          return agent && dot ? [`${dot.name} · ${agent.role}`] : [];
+        }),
+      };
+    }
+    const eligible = this.eligible(kickoff.conversation.id);
+    const director = eligible.find(
+      (agent) => agent.role.trim().toLocaleLowerCase() === 'director',
+    );
+    const targets = director
+      ? [director]
+      : eligible.slice(
+          0,
+          this.workspace.collaboration.settings(kickoff.conversation.id)
+            .maxActivations,
+        );
+    if (!targets.length)
+      throw new Error(
+        'Kickoff is ready, but no active collaborators can respond.',
+      );
+    const mentions: CollaborationMention[] = targets.map((agent) => ({
+      type: 'agent',
+      conversationId: kickoff.conversation.id,
+      sessionAgentId: agent.id,
+      dotId: agent.dotId,
+      displayName: this.workspace.dot(agent.dotId)!.name,
+    }));
+    const message = this.publishHuman(kickoff.conversation.id, {
+      content: director
+        ? 'Lead the project kickoff using the agenda above. Confirm the objective, facilitate a concise round of introductions, surface the most important open questions and risks, then propose concrete next steps with owners. Keep the discussion grounded in each collaborator’s project role and mandate.'
+        : 'Begin the project kickoff using the agenda above. Each of you should briefly introduce your role, identify one useful first proposal, and surface any key missing information or risk. Coordinate with one another and finish with concrete next steps.',
+      idempotencyKey: `kickoff-start:${masterSessionId}`,
+      mentions,
+      activation: 'mentioned',
+    });
+    return {
+      ...kickoff,
+      started: true,
+      message,
+      targets: targets.map((agent) => {
+        const dot = this.workspace.dot(agent.dotId);
+        return `${dot?.name ?? 'Collaborator'} · ${agent.role}`;
+      }),
+    };
+  }
   publishHuman(
     conversationId: string,
     input: {

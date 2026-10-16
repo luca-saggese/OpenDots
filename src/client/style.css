@@ -4667,6 +4667,139 @@ h3 {
   min-height: 42px;
   resize: vertical;
 }
+.office-slot-template-profile,
+.office-slot-profile {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+}
+.office-slot-template-profile > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.office-slot-template-profile > div:first-child span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: capitalize;
+}
+.office-slot-template-profile p,
+.office-effective-config p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.office-instruction-editor {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.office-instruction-editor summary,
+.office-review details summary {
+  width: fit-content;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.office-instruction-editor label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.office-instruction-editor textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+.office-effective-config {
+  display: grid;
+  gap: 6px;
+  border-left: 2px solid var(--accent);
+  padding: 8px 11px;
+  background: var(--surface);
+}
+.office-effective-config > b {
+  font-size: 12px;
+}
+.office-review details {
+  margin-top: 8px;
+}
+.office-review details small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 7px;
+}
+.project-kickoff-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: 14px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 8%, var(--surface)),
+    var(--surface) 65%
+  );
+}
+.project-kickoff-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.project-kickoff-heading h3 {
+  margin: 5px 0 0;
+}
+.project-status.ready {
+  color: var(--accent);
+}
+.kickoff-participants {
+  display: grid;
+  gap: 8px;
+}
+.kickoff-participants > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.kickoff-participants span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--background);
+  color: var(--muted);
+  font-size: 12px;
+}
+.kickoff-agenda {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.kickoff-agenda summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.kickoff-agenda pre {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.kickoff-feedback {
+  margin: 0;
+  color: var(--muted);
+}
 .office-review {
   border: 1px solid var(--border);
   border-radius: 12px;

@@ -7,6 +7,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { validateLearningSettings } from '../shared/learning.js';
+import { effectiveMemberInstructions } from './office-templates.js';
 import type {
   CallReceipt,
   Conversation,
@@ -113,6 +114,7 @@ export class WorkspaceStore {
         status TEXT NOT NULL CHECK(status IN ('active', 'closed', 'archived')),
         createdByType TEXT NOT NULL CHECK(createdByType IN ('user', 'session_agent')),
         createdById TEXT NOT NULL,
+        kickoffForMasterSession TEXT,
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL,
         CHECK(
@@ -186,6 +188,7 @@ export class WorkspaceStore {
       ['dots', 'composioSessionId', 'TEXT'],
       ['dots', 'composioPolicyHash', 'TEXT'],
       ['thread_bindings', 'learningContainerId', 'TEXT'],
+      ['session_conversations', 'kickoffForMasterSession', 'TEXT'],
     ]) {
       if (
         !this.db
@@ -198,6 +201,9 @@ export class WorkspaceStore {
     this.seedOfficeTemplates();
     this.db.exec(
       'CREATE UNIQUE INDEX IF NOT EXISTS master_sessions_creation_key_idx ON master_sessions(creationKey) WHERE creationKey IS NOT NULL',
+    );
+    this.db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS session_conversations_kickoff_idx ON session_conversations(kickoffForMasterSession) WHERE kickoffForMasterSession IS NOT NULL',
     );
     // Migrate only once: restarting must never restore a revoked grant.
     if (
@@ -394,16 +400,23 @@ export class WorkspaceStore {
     memberTemplateId: string;
     name: string;
     customization?: string;
+    agentInstructions?: string;
+    soulInstructions?: string;
   }) {
     const template = this.memberTemplate(input.memberTemplateId);
     if (!template) throw new Error('Member Template not found.');
     const name = input.name.trim();
-    if (!name || name.length > 40 || (input.customization?.length ?? 0) > 1200)
+    if (
+      !name ||
+      name.length > 40 ||
+      (input.customization?.length ?? 0) > 1200 ||
+      (input.agentInstructions?.length ?? 0) > 10000 ||
+      (input.soulInstructions?.length ?? 0) > 10000
+    )
       throw new Error('Provide a valid collaborator name and customization.');
     const space = this.spaces()[0];
     if (!space) throw new Error('Space not found.');
-    const customization = input.customization?.trim() ?? '';
-    const instructions = `${template.agentInstructions}${customization ? `\n\nPermanent owner customization:\n${customization}` : ''}`;
+    const effectiveInstructions = effectiveMemberInstructions(template, input);
     const dotId = randomUUID();
     const createdAt = Date.now();
     const dot: Dot = {
@@ -411,7 +424,7 @@ export class WorkspaceStore {
       spaceId: space.id,
       spaceIds: [space.id],
       name,
-      instructions,
+      instructions: effectiveInstructions.agent,
       researchAllowed: false,
       memoryAllowed: false,
       appsAllowed: false,
@@ -426,11 +439,9 @@ export class WorkspaceStore {
       dotId,
       summary: template.description,
       skills: [...template.skills],
-      workStyle: template.soulInstructions,
+      workStyle: effectiveInstructions.soul,
       memberTemplateId: template.id,
-      soulInstructions:
-        template.soulInstructions +
-        (customization ? `\n\nOwner customization: ${customization}` : ''),
+      soulInstructions: effectiveInstructions.soul,
       updatedAt: createdAt,
     };
     this.db.exec('BEGIN IMMEDIATE');
@@ -485,6 +496,8 @@ export class WorkspaceStore {
       memberTemplateId?: string;
       name?: string;
       customization?: string;
+      agentInstructions?: string;
+      soulInstructions?: string;
       role: string;
       mandate: string;
     }>;
@@ -545,7 +558,9 @@ export class WorkspaceStore {
         if (
           !row.name?.trim() ||
           row.name.trim().length > 40 ||
-          (row.customization?.length ?? 0) > 1200
+          (row.customization?.length ?? 0) > 1200 ||
+          (row.agentInstructions?.length ?? 0) > 10000 ||
+          (row.soulInstructions?.length ?? 0) > 10000
         )
           throw new Error(
             'Provide a valid name and customization for each new Dot.',
@@ -578,9 +593,11 @@ export class WorkspaceStore {
         let dotId = row.dotId;
         if (!dotId) {
           const template = this.memberTemplate(row.memberTemplateId!)!;
-          const customization = row.customization?.trim() ?? '';
+          const effectiveInstructions = effectiveMemberInstructions(
+            template,
+            row,
+          );
           dotId = row.id?.trim() || randomUUID();
-          const instructions = `${template.agentInstructions}${customization ? `\n\nPermanent owner customization:\n${customization}` : ''}`;
           this.db
             .prepare(
               `INSERT INTO dots (id,spaceId,name,instructions,researchAllowed,memoryAllowed,createdAt,learningContainerId,skillDeliveryEnabled,appsAllowed,composioToolkits) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -589,7 +606,7 @@ export class WorkspaceStore {
               dotId,
               spaceId,
               row.name!.trim(),
-              instructions,
+              effectiveInstructions.agent,
               0,
               0,
               now,
@@ -609,12 +626,9 @@ export class WorkspaceStore {
               dotId,
               template.description,
               JSON.stringify(template.skills),
-              template.soulInstructions,
+              effectiveInstructions.soul,
               template.id,
-              template.soulInstructions +
-                (customization
-                  ? `\n\nOwner customization: ${customization}`
-                  : ''),
+              effectiveInstructions.soul,
               now,
             );
         } else {
@@ -685,6 +699,8 @@ export class WorkspaceStore {
       memberTemplateId?: string;
       name?: string;
       customization?: string;
+      agentInstructions?: string;
+      soulInstructions?: string;
       role: string;
       mandate: string;
     },
@@ -711,7 +727,9 @@ export class WorkspaceStore {
       !row.dotId &&
       (!row.name?.trim() ||
         row.name.trim().length > 40 ||
-        (row.customization?.length ?? 0) > 1200)
+        (row.customization?.length ?? 0) > 1200 ||
+        (row.agentInstructions?.length ?? 0) > 10000 ||
+        (row.soulInstructions?.length ?? 0) > 10000)
     )
       throw new Error(
         'Provide a valid name and customization for the new Dot.',
@@ -733,8 +751,10 @@ export class WorkspaceStore {
     this.db.exec('BEGIN IMMEDIATE');
     try {
       if (template) {
-        const customization = row.customization?.trim() ?? '';
-        const instructions = `${template.agentInstructions}${customization ? `\n\nPermanent owner customization:\n${customization}` : ''}`;
+        const effectiveInstructions = effectiveMemberInstructions(
+          template,
+          row,
+        );
         this.db
           .prepare(
             `INSERT INTO dots (id,spaceId,name,instructions,researchAllowed,memoryAllowed,createdAt,learningContainerId,skillDeliveryEnabled,appsAllowed,composioToolkits) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
@@ -743,7 +763,7 @@ export class WorkspaceStore {
             dotId,
             master.spaceId,
             row.name!.trim(),
-            instructions,
+            effectiveInstructions.agent,
             0,
             0,
             now,
@@ -763,12 +783,9 @@ export class WorkspaceStore {
             dotId,
             template.description,
             JSON.stringify(template.skills),
-            template.soulInstructions,
+            effectiveInstructions.soul,
             template.id,
-            template.soulInstructions +
-              (customization
-                ? `\n\nOwner customization: ${customization}`
-                : ''),
+            effectiveInstructions.soul,
             now,
           );
       } else {
@@ -1123,6 +1140,182 @@ export class WorkspaceStore {
          ORDER BY c.updatedAt DESC`,
       )
       .all(masterSessionId, userId) as unknown as OrganizationalConversation[];
+  }
+  initializeProjectKickoff(masterSessionId: string, userId: string) {
+    if (userId !== this.ownerId)
+      throw new Error('Project kickoff access denied.');
+    const master = this.requireMasterSession(masterSessionId);
+    if (master.status !== 'active')
+      throw new Error('Kickoff requires an active project.');
+    const kickoffTitle = `Kickoff — ${master.name}`;
+    const agendaFor = () => {
+      const agents = this.sessionAgents(master.id).filter(
+        (agent) => agent.status === 'active',
+      );
+      const team = agents.length
+        ? agents
+            .map((agent) => {
+              const dot = this.dot(agent.dotId);
+              return `- ${dot?.name ?? agent.displayName ?? 'Collaborator'} · ${agent.role}: ${agent.mandate}`;
+            })
+            .join('\n')
+        : '- No active Session Agents are currently assigned.';
+      return [
+        `Kickoff agenda — ${master.name}`,
+        `Project objective: ${master.description.trim() || 'Clarify the desired outcome and success criteria together.'}`,
+        'Collaborators and responsibilities:',
+        team,
+        'Agenda:',
+        '1. Confirm the project goal and what success looks like.',
+        '2. Introduce collaborators and clarify responsibilities.',
+        '3. Identify missing information and assumptions.',
+        '4. Share initial proposals and useful options.',
+        '5. Surface risks, doubts, and open questions.',
+        '6. Agree on owners and concrete next steps.',
+      ].join('\n');
+    };
+    const resultFor = (conversation: OrganizationalConversation) => {
+      const agendaMessage = this.db
+        .prepare(
+          'SELECT content FROM conversation_messages WHERE conversationId=? AND idempotencyKey=?',
+        )
+        .get(conversation.id, `kickoff-agenda:${master.id}`) as
+        { content: string } | undefined;
+      const started = !!this.db
+        .prepare(
+          'SELECT 1 FROM conversation_messages WHERE conversationId=? AND idempotencyKey=?',
+        )
+        .get(conversation.id, `kickoff-start:${master.id}`);
+      return {
+        conversation,
+        agenda: agendaMessage?.content ?? agendaFor(),
+        started,
+      };
+    };
+    const existing = this.db
+      .prepare(
+        `SELECT id,masterSessionId,title,kind,visibility,status,createdByType,createdById,createdAt,updatedAt
+           FROM session_conversations WHERE kickoffForMasterSession=?`,
+      )
+      .get(master.id) as OrganizationalConversation | undefined;
+    if (existing) return resultFor(existing);
+
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const concurrent = this.db
+        .prepare(
+          `SELECT id,masterSessionId,title,kind,visibility,status,createdByType,createdById,createdAt,updatedAt
+           FROM session_conversations WHERE kickoffForMasterSession=?`,
+        )
+        .get(master.id) as OrganizationalConversation | undefined;
+      if (concurrent) {
+        this.db.exec('COMMIT');
+        return resultFor(concurrent);
+      }
+      const latestMaster = this.requireMasterSession(master.id);
+      if (latestMaster.status !== 'active')
+        throw new Error('Kickoff requires an active project.');
+      const agents = this.sessionAgents(master.id).filter(
+        (agent) => agent.status === 'active',
+      );
+      const participants = [
+        {
+          participantType: 'user' as const,
+          participantId: userId,
+          role: 'owner' as const,
+        },
+        ...agents.map((agent) => ({
+          participantType: 'session_agent' as const,
+          participantId: agent.id,
+          role: 'participant' as const,
+        })),
+      ];
+      this.validateConversationShape(
+        master.id,
+        'plenary',
+        'team',
+        participants,
+      );
+      const now = Date.now();
+      const conversation: OrganizationalConversation = {
+        id: randomUUID(),
+        masterSessionId: master.id,
+        title: kickoffTitle,
+        kind: 'plenary',
+        visibility: 'team',
+        status: 'active',
+        createdByType: 'user',
+        createdById: userId,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.db
+        .prepare(
+          `INSERT INTO session_conversations
+           (id,masterSessionId,title,kind,visibility,status,createdByType,createdById,kickoffForMasterSession,createdAt,updatedAt)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          conversation.id,
+          master.id,
+          kickoffTitle,
+          'plenary',
+          'team',
+          'active',
+          'user',
+          userId,
+          master.id,
+          now,
+          now,
+        );
+      const normalized = new Map<
+        string,
+        { participantType: 'user' | 'session_agent'; participantId: string }
+      >();
+      for (const participant of participants) {
+        const { participantType, participantId, role } = participant;
+        normalized.set(`${participantType}:${participantId}`, {
+          participantType,
+          participantId,
+        });
+        this.insertParticipant(
+          conversation.id,
+          participantType,
+          participantId,
+          role,
+          0,
+        );
+      }
+      this.linkPrimaryThreadsForConversation(conversation.id, normalized);
+      const agenda = agendaFor();
+      const agendaMessageId = randomUUID();
+      this.db
+        .prepare(
+          `INSERT INTO conversation_messages
+           (id,conversationId,sequenceNumber,senderType,senderId,content,contentType,createdAt,visibility,sourceThreadId,sourceTurnId,idempotencyKey)
+           VALUES (?,?,1,'user',?,?,'text',?,'conversation',NULL,NULL,?)`,
+        )
+        .run(
+          agendaMessageId,
+          conversation.id,
+          userId,
+          agenda,
+          now,
+          `kickoff-agenda:${master.id}`,
+        );
+      this.db.exec('COMMIT');
+      return { conversation, agenda, started: false };
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      const recovered = this.db
+        .prepare(
+          `SELECT id,masterSessionId,title,kind,visibility,status,createdByType,createdById,createdAt,updatedAt
+           FROM session_conversations WHERE kickoffForMasterSession=?`,
+        )
+        .get(master.id) as OrganizationalConversation | undefined;
+      if (recovered) return resultFor(recovered);
+      throw error;
+    }
   }
   conversationSummariesForOwner(masterSessionId: string, userId: string) {
     const conversations = this.listConversationsForOwner(

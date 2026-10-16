@@ -158,6 +158,8 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         memberTemplateId: z.string().min(1),
         name: z.string().trim().min(1).max(40),
         customization: z.string().max(1200).default(''),
+        agentInstructions: z.string().max(10000).optional(),
+        soulInstructions: z.string().max(10000).optional(),
       })
       .strict()
       .safeParse(await c.req.json().catch(() => null));
@@ -190,6 +192,8 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
                 memberTemplateId: z.string().min(1).optional(),
                 name: z.string().trim().max(40).optional(),
                 customization: z.string().max(1200).optional(),
+                agentInstructions: z.string().max(10000).optional(),
+                soulInstructions: z.string().max(10000).optional(),
                 role: z.string().trim().min(1).max(80),
                 mandate: z.string().trim().min(1).max(10000),
               })
@@ -211,6 +215,28 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       return sessionError(c, error);
     }
   });
+  app.put('/office/projects/:id/kickoff', (c) => {
+    try {
+      return c.json(
+        platform.workspace.initializeProjectKickoff(
+          c.req.param('id'),
+          platform.workspace.ownerId,
+        ),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
+  app.post('/office/projects/:id/kickoff/start', (c) => {
+    try {
+      return c.json(
+        platform.collaboration.startProjectKickoff(c.req.param('id')),
+        202,
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
   app.post('/office/projects/:id/team', async (c) => {
     const data = z
       .object({
@@ -218,6 +244,8 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         memberTemplateId: z.string().min(1).optional(),
         name: z.string().trim().max(40).optional(),
         customization: z.string().max(1200).optional(),
+        agentInstructions: z.string().max(10000).optional(),
+        soulInstructions: z.string().max(10000).optional(),
         role: z.string().trim().min(1).max(80),
         mandate: z.string().trim().min(1).max(10000),
       })

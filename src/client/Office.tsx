@@ -14,6 +14,7 @@ import type {
   DotProfile,
   MasterSession,
   MemberTemplate,
+  OrganizationalConversation,
   SessionAgent,
   TeamTemplate,
   TeamTemplatePosition,
@@ -42,8 +43,15 @@ type Slot = {
   dotId?: string;
   name: string;
   customization: string;
+  agentInstructions: string;
+  soulInstructions: string;
 };
 type ProjectResult = { masterSession: MasterSession; agents: SessionAgent[] };
+type KickoffResult = {
+  conversation: OrganizationalConversation;
+  agenda: string;
+  started: boolean;
+};
 const suggestedDotNames = [
   'Aster',
   'Milo',
@@ -69,16 +77,20 @@ const makeSlot = (position?: TeamTemplatePosition): Slot => ({
   memberTemplateId: position?.memberTemplateId ?? '',
   name: '',
   customization: '',
+  agentInstructions: '',
+  soulInstructions: '',
 });
 
 export function Office({
   workspace,
   onRefresh,
   onChatDot,
+  onOpenSpace,
 }: {
   workspace: WorkspaceState;
   onRefresh: () => Promise<void>;
   onChatDot: (dotId: string) => void;
+  onOpenSpace: (spaceId: string) => void;
 }) {
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [members, setMembers] = useState<MemberTemplate[]>([]);
@@ -97,6 +109,10 @@ export function Office({
     'overview' | 'team' | 'conversations' | 'activity'
   >('overview');
   const [projectAgents, setProjectAgents] = useState<SessionAgent[]>([]);
+  const [kickoffConversationId, setKickoffConversationId] = useState<string>();
+  const [kickoffAgenda, setKickoffAgenda] = useState('');
+  const [kickoffStarted, setKickoffStarted] = useState(false);
+  const [kickoffTargets, setKickoffTargets] = useState<string[]>([]);
   const [showWizard, setShowWizard] = useState(false);
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
@@ -164,7 +180,21 @@ export function Office({
         ),
     );
   }, [members, catalogSearch]);
+  const initializeKickoff = async (masterSessionId: string) => {
+    setError('');
+    const kickoff = await api<KickoffResult>(
+      `/office/projects/${masterSessionId}/kickoff`,
+      'PUT',
+      {},
+    );
+    setKickoffConversationId(kickoff.conversation.id);
+    setKickoffAgenda(kickoff.agenda);
+    setKickoffStarted(kickoff.started);
+    setKickoffTargets([]);
+    return kickoff;
+  };
   const openProject = async (id: string) => {
+    setError('');
     try {
       const [details, agents] = await Promise.all([
         api<MasterSession & { agents: SessionAgent[] }>(
@@ -174,7 +204,20 @@ export function Office({
       ]);
       setProject(details);
       setProjectAgents(agents);
+      setKickoffConversationId(undefined);
+      setKickoffAgenda('');
+      setKickoffStarted(false);
+      setKickoffTargets([]);
       setProjectTab('overview');
+      try {
+        await initializeKickoff(id);
+      } catch (kickoffError) {
+        setError(
+          kickoffError instanceof Error
+            ? `Project opened, but kickoff setup failed: ${kickoffError.message}`
+            : 'Project opened, but kickoff setup failed.',
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open project.');
     }
@@ -192,9 +235,20 @@ export function Office({
   };
   const chooseTeam = (id: string) => {
     setTeamId(id);
-    const positions = (
-      teams.find((team) => team.id === id)?.positions ?? []
-    ).map(makeSlot);
+    const positions = (teams.find((team) => team.id === id)?.positions ?? [])
+      .map(makeSlot)
+      .map((slot) => {
+        const template = members.find(
+          (item) => item.id === slot.memberTemplateId,
+        );
+        return template
+          ? {
+              ...slot,
+              agentInstructions: template.agentInstructions,
+              soulInstructions: template.soulInstructions,
+            }
+          : slot;
+      });
     setSlots(assignSuggestedNames(positions));
   };
   const assignSuggestedNames = (input: Slot[]) => {
@@ -224,7 +278,24 @@ export function Office({
   };
   const updateSlot = (id: string, patch: Partial<Slot>) =>
     setSlots((current) =>
-      current.map((slot) => (slot.id === id ? { ...slot, ...patch } : slot)),
+      current.map((slot) => {
+        if (slot.id !== id) return slot;
+        if (
+          patch.memberTemplateId &&
+          patch.memberTemplateId !== slot.memberTemplateId
+        ) {
+          const template = members.find(
+            (item) => item.id === patch.memberTemplateId,
+          );
+          return {
+            ...slot,
+            ...patch,
+            agentInstructions: template?.agentInstructions ?? '',
+            soulInstructions: template?.soulInstructions ?? '',
+          };
+        }
+        return { ...slot, ...patch };
+      }),
     );
   const startNewDot = async () => {
     if (!newDotTemplate || !newDotName.trim()) return;
@@ -265,6 +336,8 @@ export function Office({
                 memberTemplateId: slot.memberTemplateId,
                 name: slot.name,
                 customization: slot.customization,
+                agentInstructions: slot.agentInstructions,
+                soulInstructions: slot.soulInstructions,
               }),
           role: slot.role,
           mandate: slot.mandate,
@@ -276,6 +349,16 @@ export function Office({
       setProject(result.masterSession);
       setProjectAgents(result.agents);
       setProjectTab('overview');
+      try {
+        await initializeKickoff(result.masterSession.id);
+        setProjectTab('conversations');
+      } catch (kickoffError) {
+        setError(
+          kickoffError instanceof Error
+            ? `Project created, but kickoff setup failed: ${kickoffError.message}`
+            : 'Project created, but kickoff setup failed.',
+        );
+      }
     } catch (err) {
       setError(
         err instanceof Error
@@ -373,6 +456,32 @@ export function Office({
           </p>
         </div>
         <div className="office-actions">
+          {project && (
+            <>
+              <button
+                className="secondary-button"
+                onClick={() => setProjectTab('team')}
+              >
+                <Users size={16} />
+                Manage team
+              </button>
+              {kickoffConversationId && (
+                <button
+                  className="secondary-button"
+                  onClick={() => setProjectTab('conversations')}
+                >
+                  Open kickoff
+                </button>
+              )}
+              <button
+                className="secondary-button"
+                onClick={() => onOpenSpace(project.spaceId)}
+              >
+                <BriefcaseBusiness size={16} />
+                Open workspace
+              </button>
+            </>
+          )}
           <button
             className="secondary-button"
             onClick={() => {
@@ -444,8 +553,31 @@ export function Office({
                 className="secondary-button"
                 onClick={() => setProjectTab('team')}
               >
-                View project team <ChevronRight size={14} />
+                Manage team <ChevronRight size={14} />
               </button>
+              {!kickoffConversationId ? (
+                <button
+                  className="primary"
+                  onClick={() =>
+                    void initializeKickoff(project.id).catch((e) =>
+                      setError(
+                        e instanceof Error
+                          ? `Could not prepare kickoff: ${e.message}`
+                          : 'Could not prepare kickoff.',
+                      ),
+                    )
+                  }
+                >
+                  Retry kickoff setup
+                </button>
+              ) : (
+                <button
+                  className="primary"
+                  onClick={() => setProjectTab('conversations')}
+                >
+                  Open kickoff <ChevronRight size={14} />
+                </button>
+              )}
             </section>
           )}
           {projectTab === 'team' && (
@@ -646,6 +778,19 @@ export function Office({
               masterSessionId={project.id}
               agents={projectAgents}
               roster={roster}
+              kickoffConversationId={kickoffConversationId}
+              kickoffAgenda={kickoffAgenda}
+              kickoffStarted={kickoffStarted}
+              onStartKickoff={async () => {
+                const result = await api<{
+                  targets: string[];
+                  started: boolean;
+                }>(`/office/projects/${project.id}/kickoff/start`, 'POST', {});
+                setKickoffStarted(result.started);
+                setKickoffTargets(result.targets);
+                return result.targets;
+              }}
+              kickoffTargets={kickoffTargets}
               onChatDot={onChatDot}
             />
           )}
@@ -753,7 +898,7 @@ export function Office({
           )}
           <div className="office-section-head projects-head">
             <div>
-              <span className="eyebrow">MASTER SESSIONS</span>
+              <span className="eyebrow">MY PROJECTS</span>
               <h2>Projects</h2>
             </div>
             <button className="primary" onClick={startWizard}>
@@ -1045,9 +1190,10 @@ export function Office({
                 )}
                 <div className="office-slot-list">
                   {slots.map((slot) => {
-                    const dot = roster.find(
+                    const existing = roster.find(
                       (item) => item.dot.id === slot.dotId,
-                    )?.dot;
+                    );
+                    const dot = existing?.dot;
                     const archetype = members.find(
                       (member) => member.id === slot.memberTemplateId,
                     );
@@ -1104,6 +1250,7 @@ export function Office({
                               onChange={(e) =>
                                 updateSlot(slot.id, {
                                   memberTemplateId: e.target.value,
+                                  dotId: undefined,
                                 })
                               }
                             >
@@ -1128,7 +1275,14 @@ export function Office({
                                   assignSuggestedNames(
                                     current.map((item) =>
                                       item.id === slot.id
-                                        ? { ...item, dotId, name: '' }
+                                        ? {
+                                            ...item,
+                                            dotId,
+                                            name: '',
+                                            memberTemplateId: dotId
+                                              ? ''
+                                              : item.memberTemplateId,
+                                          }
                                         : item,
                                     ),
                                   ),
@@ -1154,15 +1308,85 @@ export function Office({
                                 ))}
                             </select>
                           </label>
-                          {!slot.dotId && (
+                          {dot && existing && (
+                            <div className="office-slot-profile">
+                              <b>{existing.profile.summary || dot.name}</b>
+                              <div className="office-skills">
+                                {existing.profile.skills.map((skill) => (
+                                  <span key={skill}>{skill}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {!slot.dotId && archetype && (
+                            <div className="office-slot-template-profile">
+                              <div>
+                                <b>{archetype.name}</b>
+                                <span>{archetype.category}</span>
+                              </div>
+                              <p>{archetype.description}</p>
+                              <div className="office-skills">
+                                {archetype.skills.map((skill) => (
+                                  <span key={skill}>{skill}</span>
+                                ))}
+                              </div>
+                              <details className="office-instruction-editor">
+                                <summary>Review and edit AGENT / SOUL</summary>
+                                <label>
+                                  AGENT · skills, responsibilities, methods,
+                                  quality criteria
+                                  <textarea
+                                    value={
+                                      slot.agentInstructions ||
+                                      archetype.agentInstructions
+                                    }
+                                    onChange={(e) =>
+                                      updateSlot(slot.id, {
+                                        agentInstructions: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <label>
+                                  SOUL · personality and collaboration style
+                                  <textarea
+                                    value={
+                                      slot.soulInstructions ||
+                                      archetype.soulInstructions
+                                    }
+                                    onChange={(e) =>
+                                      updateSlot(slot.id, {
+                                        soulInstructions: e.target.value,
+                                      })
+                                    }
+                                  />
+                                </label>
+                                <div className="office-effective-config">
+                                  <b>Effective permanent configuration</b>
+                                  <p>
+                                    {slot.agentInstructions ||
+                                      archetype.agentInstructions}
+                                  </p>
+                                  {slot.customization.trim() && (
+                                    <p>
+                                      Owner customization: {slot.customization}
+                                    </p>
+                                  )}
+                                  <p>
+                                    <b>SOUL:</b>{' '}
+                                    {slot.soulInstructions ||
+                                      archetype.soulInstructions}
+                                  </p>
+                                </div>
+                              </details>
+                            </div>
+                          )}
+                          {!slot.dotId && archetype && (
                             <label>
-                              <span>
-                                Personalize {slot.name}{' '}
-                                <small>(optional)</small>
-                              </span>
+                              <span>Permanent customization (optional)</span>
                               <textarea
                                 aria-label={`Personalization for ${slot.name}`}
-                                placeholder="Add project-specific permanent instructions"
+                                placeholder="Add enduring professional context for this Dot"
                                 value={slot.customization}
                                 onChange={(e) =>
                                   updateSlot(slot.id, {
@@ -1228,22 +1452,57 @@ export function Office({
                   <h3>{projectName}</h3>
                   <p>{description || 'No project description.'}</p>
                   <small>Template: {currentTeam?.name ?? 'Custom team'}</small>
-                  {slots.map((slot) => (
-                    <article key={slot.id}>
-                      <b>{slot.role}</b>
-                      <span>
-                        {slot.dotId
-                          ? `Reuse ${roster.find((item) => item.dot.id === slot.dotId)?.dot.name ?? 'existing Dot'}`
-                          : `Create ${slot.name} · ${members.find((member) => member.id === slot.memberTemplateId)?.name ?? 'no template'}`}
-                      </span>
-                      <small>Mandate: {slot.mandate}</small>
-                      {slot.customization && (
-                        <small>
-                          Permanent customization: {slot.customization}
-                        </small>
-                      )}
-                    </article>
-                  ))}
+                  {slots.map((slot) => {
+                    const template = members.find(
+                      (member) => member.id === slot.memberTemplateId,
+                    );
+                    const existing = roster.find(
+                      (item) => item.dot.id === slot.dotId,
+                    );
+                    return (
+                      <article key={slot.id}>
+                        <b>{slot.role}</b>
+                        <span>
+                          {slot.dotId
+                            ? `Reuse ${existing?.dot.name ?? 'existing Dot'}`
+                            : `Create ${slot.name} · ${template?.name ?? 'no template'}`}
+                        </span>
+                        {template && (
+                          <small>
+                            {template.description} ·{' '}
+                            {template.skills.join(', ')}
+                          </small>
+                        )}
+                        <small>Project mandate: {slot.mandate}</small>
+                        {!slot.dotId && template && (
+                          <details>
+                            <summary>Instructions that will be saved</summary>
+                            <small>
+                              AGENT:{' '}
+                              {slot.agentInstructions ||
+                                template.agentInstructions}
+                            </small>
+                            {slot.customization.trim() && (
+                              <small>
+                                Permanent customization: {slot.customization}
+                              </small>
+                            )}
+                            <small>
+                              SOUL:{' '}
+                              {slot.soulInstructions ||
+                                template.soulInstructions}
+                            </small>
+                          </details>
+                        )}
+                        {existing && (
+                          <small>
+                            Existing permanent identity will be reused; mandate
+                            remains specific to this project.
+                          </small>
+                        )}
+                      </article>
+                    );
+                  })}
                 </div>
                 <p className="muted">
                   Confirmation creates the Space, Master Session, new Dots,
