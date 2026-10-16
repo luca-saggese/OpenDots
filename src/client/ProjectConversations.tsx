@@ -748,12 +748,18 @@ export function ProjectConversations({
                     );
                   })
               )}
-              {!loadingMessages && !messages.length && (
-                <div className="conversation-empty">
-                  <MessageCircle size={26} />
-                  <p>No messages yet. Your message will be recorded here.</p>
-                </div>
-              )}
+              {!loadingMessages &&
+                !messages.some(
+                  (message) =>
+                    current.id !== kickoffConversationId ||
+                    message.idempotencyKey !==
+                      `kickoff-agenda:${masterSessionId}`,
+                ) && (
+                  <div className="conversation-empty">
+                    <MessageCircle size={26} />
+                    <p>No messages yet. Your message will be recorded here.</p>
+                  </div>
+                )}
             </div>
             {current.status === 'active' && (
               <form

@@ -5385,14 +5385,18 @@ h3 {
   margin-bottom: 12px;
 }
 .office-page.has-project .conversation-layout {
+  width: 100%;
+  min-width: 0;
   height: calc(100dvh - 275px);
   min-height: 320px;
   gap: 10px;
   align-items: stretch;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 270px);
 }
 .office-page.has-project .conversation-main {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -5416,6 +5420,8 @@ h3 {
   max-height: none;
   overscroll-behavior: contain;
   padding: 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--background) 35%, var(--surface));
 }
 .office-page.has-project .conversation-empty {
   min-height: 0;
@@ -5996,6 +6002,7 @@ h3 {
   .office-page.has-project .conversation-layout {
     height: auto;
     min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
   }
   .office-page.has-project .conversation-main {
     height: calc(100dvh - 285px);
