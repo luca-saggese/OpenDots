@@ -524,17 +524,27 @@ export function Office({
     <main
       className={`main-content office-page ${project ? 'has-project' : ''}`}
     >
-      <div className="office-heading">
-        <div>
-          <span className="eyebrow">COLLABORATIVE DOTS WITH MEMORY</span>
-          <h1>{project ? project.name : 'My Office'}</h1>
-          <p>
-            {project
-              ? project.description ||
-                'Project overview and assigned collaborators.'
-              : 'Your permanent collaborators and the projects they work on.'}
-          </p>
-        </div>
+      <div
+        className={`office-heading ${project ? 'office-heading-project' : ''}`}
+      >
+        {project ? (
+          <div className="office-project-heading-copy">
+            <h1>{project.name}</h1>
+            <div className="office-project-heading-meta">
+              <span className="eyebrow">COLLABORATIVE DOTS WITH MEMORY</span>
+              <p>
+                {project.description ||
+                  'Project overview and assigned collaborators.'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <span className="eyebrow">COLLABORATIVE DOTS WITH MEMORY</span>
+            <h1>My Office</h1>
+            <p>Your permanent collaborators and the projects they work on.</p>
+          </div>
+        )}
       </div>
       {error && (
         <p className="chat-error" role="alert">
