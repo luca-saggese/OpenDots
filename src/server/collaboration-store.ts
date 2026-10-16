@@ -26,7 +26,7 @@ export class CollaborationStore {
         threadId TEXT NOT NULL UNIQUE, turnId TEXT NOT NULL,
         triggerMessageId TEXT NOT NULL REFERENCES conversation_messages(id),
         kind TEXT NOT NULL, status TEXT NOT NULL, authorization TEXT NOT NULL,
-        output TEXT, error TEXT, createdAt INTEGER NOT NULL, completedAt INTEGER, handRaiseId TEXT,
+        output TEXT, error TEXT, progress TEXT, partialOutput TEXT, createdAt INTEGER NOT NULL, completedAt INTEGER, handRaiseId TEXT,
         UNIQUE(requestId, sessionAgentId, kind)
       );
       CREATE INDEX IF NOT EXISTS collaboration_execution_conversation_idx ON collaboration_executions(conversationId, createdAt);
@@ -38,6 +38,22 @@ export class CollaborationStore {
         UNIQUE(conversationId, sessionAgentId, triggerMessageId)
       );
     `);
+    for (const [column, definition] of [
+      ['progress', 'TEXT'],
+      ['partialOutput', 'TEXT'],
+    ] as const) {
+      try {
+        db.exec(
+          `ALTER TABLE collaboration_executions ADD COLUMN ${column} ${definition}`,
+        );
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !error.message.includes('duplicate column name')
+        )
+          throw error;
+      }
+    }
   }
   recover() {
     this.db
@@ -65,7 +81,7 @@ export class CollaborationStore {
       .get(id);
     return row
       ? JSON.parse(String(row.value))
-      : { mode: 'manual', maxActivations: 3, evaluationBudget: 2 };
+      : { mode: 'manual', maxActivations: 8, evaluationBudget: 2 };
   }
   saveSettings(id: string, value: CollaborationSettings) {
     this.db
@@ -152,6 +168,8 @@ export class CollaborationStore {
       turnId: randomUUID(),
       status: 'queued',
       output: null,
+      progress: 'Queued; waiting for the previous turn…',
+      partialOutput: '',
       error: null,
       createdAt: Date.now(),
       completedAt: null,
@@ -182,6 +200,13 @@ export class CollaborationStore {
         status === 'running' || status === 'queued' ? null : Date.now(),
         id,
       );
+  }
+  stream(id: string, progress: string, partialOutput: string) {
+    this.db
+      .prepare(
+        "UPDATE collaboration_executions SET progress=?,partialOutput=? WHERE id=? AND status='running'",
+      )
+      .run(progress.slice(0, 300), partialOutput.slice(-20000), id);
   }
   propose(execution: CollaborationExecution, reason: string) {
     const raise: HandRaise = {

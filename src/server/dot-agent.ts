@@ -343,6 +343,12 @@ export class DotAgent extends AbstractAgent {
           api: 'chat-completions',
           maxRetries: 1,
         });
+        const isOpenRouterDeepSeekV4 =
+          new URL(this.config.baseUrl ?? 'https://api.openai.com/v1')
+            .hostname === 'openrouter.ai' &&
+          /(?:^|\/)deepseek-v4-(?:flash|pro)(?:$|[-:])/i.test(
+            this.config.model,
+          );
         const serverTools = [
           ...tools,
           ...pageTools(pages),
@@ -386,7 +392,10 @@ export class DotAgent extends AbstractAgent {
               abortController: ctx.abortController,
               threadId: ctx.input.threadId,
               runId: ctx.input.runId,
-              modelOptions: { max_completion_tokens: 2200 },
+              modelOptions: {
+                max_completion_tokens: 2200,
+                ...(isOpenRouterDeepSeekV4 ? { reasoning_effort: 'low' } : {}),
+              },
               agentLoopStrategy: maxIterations(
                 dot.skillDeliveryEnabled && conversation.learningContainerId
                   ? 10

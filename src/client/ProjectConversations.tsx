@@ -9,6 +9,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ChevronDown,
+  Clock3,
   MessageCircle,
   Plus,
   Send,
@@ -192,7 +193,7 @@ export function ProjectConversations({
       }
     };
     void poll();
-    const timer = setInterval(() => void poll(), 1500);
+    const timer = setInterval(() => void poll(), 500);
     return () => {
       active = false;
       clearInterval(timer);
@@ -448,7 +449,13 @@ export function ProjectConversations({
       setMentions([]);
       setSendKey(undefined);
       setNotice(
-        'Message published. Requested contributions are tracked below.',
+        publishOnly
+          ? 'Message published. No Dot was activated (publish-only selected).'
+          : activationNames
+            ? `Response requested from ${activationNames}. Follow execution status below.`
+            : current?.kind === 'direct'
+              ? 'Message published. The private collaborator was asked to respond.'
+              : 'Message published to the conversation. No Dot was activated; select a recipient from the @ suggestions to request a response.',
       );
       const page = await api<OrganizationalMessage[]>(
         `/organizational-conversations/${selected.conversation.id}/messages?limit=${PAGE_SIZE}`,
@@ -579,6 +586,22 @@ export function ProjectConversations({
     )
     .join(', ');
   const selectableAgents = agents.filter((agent) => agent.status === 'active');
+  const selectedMentionNames = new Set(
+    mentions.flatMap((mention) =>
+      mention.type === 'all' ? ['tutti'] : [mention.displayName],
+    ),
+  );
+  const unresolvedMentionNames = [
+    ...draft.matchAll(/(?:^|\s)@([\p{L}\p{N}_-]+)/gu),
+  ]
+    .map((match) => match[1])
+    .filter(
+      (name) =>
+        ![...selectedMentionNames].some(
+          (selectedName) =>
+            selectedName.toLocaleLowerCase() === name.toLocaleLowerCase(),
+        ),
+    );
   const availableToAdd = selectableAgents.filter(
     (agent) =>
       !participants.some(
@@ -586,6 +609,9 @@ export function ProjectConversations({
           participant.participantType === 'session_agent' &&
           participant.participantId === agent.id,
       ),
+  );
+  const activeExecutions = (snapshot?.executions ?? []).filter((execution) =>
+    ['queued', 'running'].includes(execution.status),
   );
 
   if (selected && current)
@@ -771,8 +797,54 @@ export function ProjectConversations({
                   );
                 })
               )}
+              {activeExecutions.map((execution) => {
+                const agent = agents.find(
+                  (item) => item.id === execution.sessionAgentId,
+                );
+                const name =
+                  roster.find((person) => person.dot.id === agent?.dotId)?.dot
+                    .name ??
+                  agent?.displayName ??
+                  'Collaborator';
+                return (
+                  <article
+                    className="organizational-message agent-working"
+                    key={`working-${execution.id}`}
+                    role="status"
+                  >
+                    <div>
+                      <b>
+                        {name}{' '}
+                        {execution.status === 'queued'
+                          ? 'è in coda'
+                          : 'sta lavorando'}
+                      </b>
+                      {execution.status === 'queued' ? (
+                        <Clock3 size={14} aria-hidden="true" />
+                      ) : (
+                        <span className="activity-dots" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      )}
+                    </div>
+                    <p>
+                      {execution.status === 'queued'
+                        ? 'In attesa che si liberi un turno. Il tempo di esecuzione non è ancora iniziato.'
+                        : (execution.progress ??
+                          'Sta preparando una risposta…')}
+                    </p>
+                    {execution.status === 'running' &&
+                      execution.partialOutput && (
+                        <p>{execution.partialOutput}</p>
+                      )}
+                  </article>
+                );
+              })}
               {!loadingMessages &&
                 !hasVisibleMessages &&
+                !activeExecutions.length &&
                 current.id !== kickoffConversationId && (
                   <div className="conversation-empty">
                     <MessageCircle size={26} />
@@ -835,18 +907,29 @@ export function ProjectConversations({
                     disabled={!draft.trim() || sending}
                   >
                     <Send size={15} />
-                    {sending ? 'Publishing…' : 'Publish message'}
+                    Invia comando
                   </button>
                 </div>
                 {collaborationControls}
                 <div className="organizational-composer-actions">
                   <small>
                     {publishOnly
-                      ? 'No collaborator will be activated.'
+                      ? mentions.length
+                        ? 'Publish-only is selected. Mentioned collaborators will not be activated.'
+                        : 'No collaborator will be activated.'
                       : activationNames
                         ? `Requested: ${activationNames}.`
                         : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
                   </small>
+                  {!!unresolvedMentionNames.length && !publishOnly && (
+                    <small className="chat-error" role="status">
+                      {unresolvedMentionNames
+                        .map((name) => `@${name}`)
+                        .join(', ')}{' '}
+                      is text only. Select each collaborator from the @
+                      suggestions to request a response.
+                    </small>
+                  )}
                 </div>
               </form>
             )}
@@ -871,6 +954,11 @@ export function ProjectConversations({
                 participant.participantType === 'session_agent'
                   ? agents.find((item) => item.id === participant.participantId)
                   : undefined;
+              const execution = snapshot?.executions.find(
+                (item) =>
+                  item.sessionAgentId === participant.participantId &&
+                  ['queued', 'running'].includes(item.status),
+              );
               return (
                 <article
                   className="conversation-participant"
@@ -893,9 +981,39 @@ export function ProjectConversations({
                       </span>
                     )}
                     <span className="conversation-participant-details">
-                      <b>{participant.name}</b>
+                      <span className="conversation-participant-name">
+                        <b>{participant.name}</b>
+                        {agent && (
+                          <small className="conversation-dot-role">
+                            {agent.role}
+                          </small>
+                        )}
+                      </span>
                       <span className="conversation-participant-status">
                         <small>{participant.status}</small>
+                        {execution && (
+                          <span
+                            className="participant-thinking"
+                            title={execution.progress ?? 'Sta lavorando…'}
+                            aria-label={`${participant.name} ${execution.status === 'queued' ? 'è in coda' : 'sta lavorando'}`}
+                          >
+                            {execution.status === 'queued' ? (
+                              <Clock3 size={13} aria-hidden="true" />
+                            ) : (
+                              <>
+                                <MessageCircle size={13} aria-hidden="true" />
+                                <span
+                                  className="activity-dots"
+                                  aria-hidden="true"
+                                >
+                                  <i />
+                                  <i />
+                                  <i />
+                                </span>
+                              </>
+                            )}
+                          </span>
+                        )}
                         {agent?.status === 'active' &&
                         participant.role !== 'owner' ? (
                           <button

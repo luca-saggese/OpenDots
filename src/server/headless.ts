@@ -1,5 +1,5 @@
 import { IntelligenceAgent } from '@copilotkit/core';
-import type { Message } from '@ag-ui/core';
+import type { BaseEvent, Message } from '@ag-ui/core';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { voiceReceiptMessagePrefix } from '../shared/voice-receipt.js';
@@ -13,6 +13,27 @@ export function currentTurnText(messages: Message[], error?: Error): string {
   if (typeof content !== 'string' || !content.trim())
     throw new Error('The current compute turn returned no assistant response.');
   return content;
+}
+
+function completedTurnText(
+  messages: Message[],
+  error?: Error,
+): string | undefined {
+  if (error) throw error;
+  const assistant = messages
+    .filter((message) => message.role === 'assistant')
+    .at(-1);
+  const content = assistant?.content;
+  const resolvedToolCalls = new Set(
+    messages.flatMap((message) =>
+      message.role === 'tool' ? [message.toolCallId] : [],
+    ),
+  );
+  const pendingToolCall =
+    assistant?.role === 'assistant' &&
+    assistant.toolCalls?.some((call) => !resolvedToolCalls.has(call.id));
+  if (pendingToolCall) return undefined;
+  return typeof content === 'string' && content.trim() ? content : undefined;
 }
 
 const runtimeInfoSchema = z.object({
@@ -30,6 +51,7 @@ export async function runThreadTurn(
   signal: AbortSignal,
   metadata?: Record<string, unknown>,
   runId?: string,
+  onEvent?: (event: BaseEvent) => void,
 ): Promise<string> {
   signal.throwIfAborted();
   const response = await fetch(`${runtimeUrl}/info`, { headers, signal });
@@ -54,6 +76,7 @@ export async function runThreadTurn(
   agent.threadId = threadId;
   let runError: Error | undefined;
   const subscription = agent.subscribe({
+    onEvent: ({ event }) => onEvent?.(event),
     onRunErrorEvent: ({ event }) => {
       runError = new Error(event.message);
     },
@@ -74,9 +97,20 @@ export async function runThreadTurn(
       content: prompt,
       ...(metadata ? { metadata } : {}),
     });
-    const result = await agent.runAgent(runId ? { runId } : undefined);
-    signal.throwIfAborted();
-    return currentTurnText(result.newMessages, runError);
+    let result = await agent.runAgent(runId ? { runId } : undefined);
+    while (true) {
+      signal.throwIfAborted();
+      const answer = completedTurnText(result.newMessages, runError);
+      if (answer) return answer;
+      agent.addMessage({
+        id: randomUUID(),
+        role: 'user',
+        content:
+          'Continue from all tool results already present. Resolve every pending tool call, call any additional tools needed for the task, and keep going until no tool call remains pending. Then write a concise user-facing final answer.',
+      });
+      runError = undefined;
+      result = await agent.runAgent();
+    }
   } finally {
     signal.removeEventListener('abort', stop);
     subscription.unsubscribe();

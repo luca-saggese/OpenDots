@@ -55,6 +55,12 @@ export function MentionComposer({
         value={value}
         maxLength={20000}
         onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
         placeholder="Write a message. Type @ to select collaborators…"
       />
       {query !== undefined && (
@@ -127,11 +133,6 @@ export function CollaborationControls({
   const pending = snapshot.handRaises.filter(
     (raise) => raise.status === 'pending',
   );
-  const executions = snapshot.executions
-    .filter((execution) =>
-      ['queued', 'running', 'failed', 'interrupted'].includes(execution.status),
-    )
-    .slice(-12);
   return (
     <section
       className="collaboration-controls"
@@ -246,45 +247,6 @@ export function CollaborationControls({
           </button>
         </article>
       ))}
-      <div aria-live="polite">
-        {executions.map((execution) => (
-          <article
-            className={`collaboration-execution ${execution.status}`}
-            key={execution.id}
-          >
-            <span>
-              {name(execution.sessionAgentId)} ·{' '}
-              {execution.kind === 'evaluation'
-                ? 'hand raise evaluation'
-                : 'response'}{' '}
-              · {execution.status === 'running' ? 'working…' : execution.status}
-            </span>
-            {execution.error && <p role="alert">{execution.error}</p>}
-            {['queued', 'running'].includes(execution.status) && (
-              <button
-                type="button"
-                className="quiet-button"
-                onClick={() =>
-                  void onAction(`/executions/${execution.id}/cancel`, {})
-                }
-              >
-                Cancel
-              </button>
-            )}
-            {execution.canRecover && (
-              <button
-                type="button"
-                className="quiet-button"
-                onClick={() =>
-                  void onAction(`/executions/${execution.id}/publish`, {})
-                }
-              >
-                Recover completed response
-              </button>
-            )}
-          </article>
-        ))}
-      </div>
     </section>
   );
 }

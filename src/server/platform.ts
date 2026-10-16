@@ -67,7 +67,7 @@ export class Platform {
             name: 'Project collaboration turn',
           });
         },
-        turn: (execution, signal) =>
+        turn: (execution, signal, onEvent) =>
           runThreadTurn(
             config.runtimeUrl,
             {
@@ -85,6 +85,7 @@ export class Platform {
               executionId: execution.id,
             },
             execution.turnId,
+            onEvent,
           ),
       },
       {

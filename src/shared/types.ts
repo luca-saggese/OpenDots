@@ -272,6 +272,8 @@ export interface CollaborationExecution {
     'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted';
   authorization: string;
   output: string | null;
+  progress: string | null;
+  partialOutput: string | null;
   error: string | null;
   createdAt: number;
   completedAt: number | null;

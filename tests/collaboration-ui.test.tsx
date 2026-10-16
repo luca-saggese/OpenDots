@@ -76,7 +76,45 @@ it('selects @tutti as a structured conversation-scoped mention', async () => {
     { type: 'all', conversationId: 'conversation' },
   ]);
 });
-it('renders backend execution status and sends approval as a control action without inventing a reply', async () => {
+it('submits on Enter and leaves Shift+Enter available for a newline', async () => {
+  await act(async () => {
+    root = create(
+      <MentionComposer
+        conversationId="conversation"
+        value="hello"
+        onChange={vi.fn()}
+        mentions={[]}
+        onMentions={vi.fn()}
+        candidates={[]}
+      />,
+    );
+  });
+  const textarea = root!.root.findByType('textarea');
+  const preventDefault = vi.fn();
+  const requestSubmit = vi.fn();
+  await act(async () =>
+    textarea.props.onKeyDown({
+      key: 'Enter',
+      shiftKey: false,
+      preventDefault,
+      currentTarget: { form: { requestSubmit } },
+    }),
+  );
+  expect(preventDefault).toHaveBeenCalledOnce();
+  expect(requestSubmit).toHaveBeenCalledOnce();
+  const shiftPreventDefault = vi.fn();
+  await act(async () =>
+    textarea.props.onKeyDown({
+      key: 'Enter',
+      shiftKey: true,
+      preventDefault: shiftPreventDefault,
+      currentTarget: { form: { requestSubmit } },
+    }),
+  );
+  expect(shiftPreventDefault).not.toHaveBeenCalled();
+  expect(requestSubmit).toHaveBeenCalledOnce();
+});
+it('sends approval as a control action without inventing a reply', async () => {
   const onAction = vi.fn(async () => {});
   const snapshot: CollaborationSnapshot = {
     settings: { mode: 'hand_raise', maxActivations: 3, evaluationBudget: 1 },

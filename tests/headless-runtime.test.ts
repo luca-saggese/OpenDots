@@ -128,6 +128,65 @@ it('marks scheduled user prompts while preserving their text and user role', asy
     }),
   );
 });
+it('continues a completed tool-only turn until the model writes a final answer and forwards stream events', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn<typeof fetch>().mockResolvedValue(
+      Response.json({
+        mode: 'intelligence',
+        intelligence: { wsUrl: 'wss://example.com/client' },
+        agents: { dot: {} },
+      }),
+    ),
+  );
+  sdk.run
+    .mockResolvedValueOnce({
+      newMessages: [
+        {
+          id: 'tool',
+          role: 'assistant',
+          content: '',
+          toolCalls: [{ id: 'call' }],
+        },
+      ],
+    })
+    .mockResolvedValueOnce({
+      newMessages: [
+        { id: 'answer', role: 'assistant', content: 'Here is the result.' },
+      ],
+    });
+  const onEvent = vi.fn();
+  await expect(
+    runThreadTurn(
+      'https://runtime.test',
+      {},
+      'dot',
+      'thread',
+      'Research this',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      onEvent,
+    ),
+  ).resolves.toBe('Here is the result.');
+  expect(sdk.run).toHaveBeenCalledTimes(2);
+  expect(sdk.message).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      role: 'user',
+      content: expect.stringContaining('Continue from all tool results'),
+    }),
+  );
+  sdk.subscriber?.onEvent?.({
+    event: { type: 'TEXT_MESSAGE_CONTENT', delta: 'chunk' } as never,
+    messages: [],
+    state: {},
+    agent: {} as never,
+    input: {} as never,
+  });
+  expect(onEvent).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'TEXT_MESSAGE_CONTENT', delta: 'chunk' }),
+  );
+});
 it('rejects failed runtime discovery instead of waiting for browser status indefinitely', async () => {
   vi.stubGlobal(
     'fetch',

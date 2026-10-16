@@ -211,6 +211,68 @@ it('starts a persistent kickoff only on request, respects the activation cap, an
   ).toHaveLength(2);
 });
 
+it('continues the same plenary after kickoff and gives a colleague prior authorized contributions', async () => {
+  const f = fixture();
+  const initialized = f.workspace.initializeProjectKickoff(
+    f.master.id,
+    f.workspace.ownerId,
+  );
+  const conversationId = initialized.conversation.id;
+  const started = await f.app.request(
+    `/api/office/projects/${f.master.id}/kickoff/start`,
+    request({}),
+  );
+  expect(started.status).toBe(202);
+  await f.service.idle();
+
+  const novaRequest = await f.app.request(
+    `/api/organizational-conversations/${conversationId}/messages`,
+    request({
+      content: '@Laura, can you clarify your proposal?',
+      idempotencyKey: 'after-kickoff-nova',
+      activation: 'mentioned',
+      mentions: [f.mention(conversationId, 0)],
+    }),
+  );
+  expect(novaRequest.status).toBe(201);
+  const novaMessage = await novaRequest.json();
+  await f.service.idle();
+  const novaExecution = f.workspace.collaboration
+    .executions(conversationId)
+    .find((execution) => execution.triggerMessageId === novaMessage.id);
+  expect(novaExecution?.status).toBe('succeeded');
+  expect(f.runtime.turn).toHaveBeenCalledTimes(4);
+
+  const ezraRequest = await f.app.request(
+    `/api/organizational-conversations/${conversationId}/messages`,
+    request({
+      content: '@Paolo, what do you think?',
+      idempotencyKey: 'after-nova-ezra',
+      activation: 'mentioned',
+      mentions: [f.mention(conversationId, 1)],
+    }),
+  );
+  expect(ezraRequest.status).toBe(201);
+  await f.service.idle();
+
+  const executions = f.workspace.collaboration.executions(conversationId);
+  expect(executions).toHaveLength(5);
+  expect(executions.at(-1)).toMatchObject({
+    sessionAgentId: f.agents[1].id,
+    status: 'succeeded',
+  });
+  expect(f.contexts.at(-1)).toContain(
+    'Actual runtime contribution from Laura.',
+  );
+  const messages = f.workspace.listConversationMessagesForUser(
+    conversationId,
+    f.workspace.ownerId,
+  );
+  expect(
+    messages.filter((message) => message.senderType === 'session_agent'),
+  ).toHaveLength(5);
+});
+
 it('renames a permanent Dot through the API without changing its identity or other projects', async () => {
   const f = fixture();
   const second = f.workspace.createSpace('Other', 'Second project');
@@ -500,6 +562,51 @@ it('persists timeout and runtime errors without fabricated agent messages', asyn
   expect(g.service.state(other.id).executions[0].error).toBe(
     'Provider unavailable',
   );
+});
+
+it('does not start a queued execution timeout until that execution begins', async () => {
+  const firstStarted = deferred<void>();
+  const secondStarted = deferred<void>();
+  const finishSecond = deferred<string>();
+  let calls = 0;
+  const f = fixture({
+    timeoutMs: 30,
+    turn: async () => {
+      calls += 1;
+      if (calls === 1) {
+        firstStarted.resolve();
+        return new Promise<string>(() => {});
+      }
+      secondStarted.resolve();
+      return finishSecond.promise;
+    },
+  });
+  const conversation = f.conversation();
+  f.service.publishHuman(conversation.id, {
+    content: 'Respond in turn',
+    activation: 'mentioned',
+    mentions: [{ type: 'all', conversationId: conversation.id }],
+  });
+  await firstStarted.promise;
+  await new Promise((resolve) => setTimeout(resolve, 45));
+  await secondStarted.promise;
+  const executions = f.workspace.collaboration.executions(conversation.id);
+  expect(executions[0]).toMatchObject({
+    status: 'failed',
+    error: 'Agent execution timed out.',
+  });
+  expect(executions[1]).toMatchObject({
+    status: 'running',
+    error: null,
+    completedAt: null,
+    progress: 'Starting response…',
+  });
+  expect(f.runtime.turn).toHaveBeenCalledTimes(2);
+  finishSecond.resolve('Queued response');
+  await f.service.idle();
+  expect(
+    f.workspace.collaboration.executions(conversation.id)[1],
+  ).toMatchObject({ status: 'succeeded' });
 });
 
 it('cancels queued and in-flight executions without publishing a late response', async () => {

@@ -14,7 +14,10 @@ afterEach(() => {
   databases.splice(0).forEach((db) => db.close());
 });
 
-function fixture() {
+function fixture(
+  model = 'custom-model',
+  baseUrl = 'https://unused.invalid/v1',
+) {
   const store = new Store(':memory:');
   const workspace = new WorkspaceStore(':memory:', 'owner');
   databases.push(store, workspace);
@@ -26,8 +29,8 @@ function fixture() {
     {
       intelligenceKey: 'fixture',
       apiKey: 'fixture',
-      model: 'custom-model',
-      baseUrl: 'https://unused.invalid/v1',
+      model,
+      baseUrl,
       runtimeUrl: '',
       voiceName: 'marin',
       slackUsers: [],
@@ -137,6 +140,22 @@ it('executes a page tool, continues with its result, and emits AG-UI text and to
       }),
     ]),
   );
+});
+
+it('uses low reasoning effort for OpenRouter DeepSeek V4 to preserve answer tokens', async () => {
+  const f = fixture(
+    'deepseek/deepseek-v4-flash',
+    'https://openrouter.ai/api/v1',
+  );
+  const network = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(
+      completion({ role: 'assistant', content: 'Here is the answer.' }),
+    );
+  await lastValueFrom(f.agent.run(f.input).pipe(toArray()));
+  const request = JSON.parse(String(network.mock.calls[0][1]?.body));
+  expect(request.max_completion_tokens).toBe(2200);
+  expect(request.reasoning_effort).toBe('low');
 });
 
 it('offers the canonical review tool and waits for the client without saving a page', async () => {

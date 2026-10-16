@@ -1,3 +1,4 @@
+import type { BaseEvent } from '@ag-ui/core';
 import type {
   CollaborationExecution,
   CollaborationMention,
@@ -14,7 +15,11 @@ import {
 export interface CollaborationRuntime {
   ready(): void;
   createThread(threadId: string, dotId: string): Promise<void>;
-  turn(execution: CollaborationExecution, signal: AbortSignal): Promise<string>;
+  turn(
+    execution: CollaborationExecution,
+    signal: AbortSignal,
+    onEvent: (event: BaseEvent) => void,
+  ): Promise<string>;
 }
 export class CollaborationService {
   private tail: Promise<void> = Promise.resolve();
@@ -188,12 +193,11 @@ export class CollaborationService {
     }
     if (activation === 'mentioned' && !targets.length)
       throw new Error('Select at least one structured mention.');
-    if (
-      targets.length >
-      this.workspace.collaboration.settings(conversationId).maxActivations
-    )
+    const activationLimit =
+      this.workspace.collaboration.settings(conversationId).maxActivations;
+    if (targets.length > activationLimit)
       throw new Error(
-        'Activation limit exceeded. Select fewer collaborators or change the conversation budget.',
+        `Activation limit exceeded: this message requests ${targets.length} responses, but the conversation budget allows ${activationLimit}. Increase the budget or select fewer collaborators.`,
       );
     if (targets.length) this.available();
     for (const agent of targets)
@@ -275,17 +279,8 @@ export class CollaborationService {
       return;
     const controller = new AbortController();
     this.controllers.set(execution.id, controller);
-    const timeout = setTimeout(
-      () => controller.abort(new Error('Agent execution timed out.')),
-      this.options.timeoutMs ?? 90000,
-    );
-    const watcher = setInterval(() => {
-      try {
-        this.check(execution);
-      } catch (error) {
-        controller.abort(error);
-      }
-    }, 50);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    let watcher: ReturnType<typeof setInterval> | undefined;
     let stopWaiting: (() => void) | undefined;
     const aborted = new Promise<never>((_, reject) => {
       const stop = () =>
@@ -295,6 +290,22 @@ export class CollaborationService {
     });
     try {
       this.workspace.collaboration.update(execution.id, 'running');
+      this.workspace.collaboration.stream(
+        execution.id,
+        'Starting response…',
+        '',
+      );
+      timeout = setTimeout(
+        () => controller.abort(new Error('Agent execution timed out.')),
+        this.options.timeoutMs ?? 90000,
+      );
+      watcher = setInterval(() => {
+        try {
+          this.check(execution);
+        } catch (error) {
+          controller.abort(error);
+        }
+      }, 50);
       this.available();
       this.check(execution);
       this.workspace.prepareCollaborationThread(execution.id);
@@ -306,7 +317,45 @@ export class CollaborationService {
       // Validate context before any compute; DotAgent assembles it again at the runtime boundary.
       assembleCollaborationContext(this.workspace, execution);
       const output = await Promise.race([
-        this.runtime.turn(execution, controller.signal),
+        this.runtime.turn(execution, controller.signal, (event) => {
+          this.check(execution);
+          if (event.type === 'TEXT_MESSAGE_CONTENT') {
+            const latest = this.workspace.collaboration.execution(execution.id);
+            const partial = `${latest?.partialOutput ?? ''}${event.delta}`;
+            this.workspace.collaboration.stream(
+              execution.id,
+              'Writing response…',
+              partial,
+            );
+          } else if (event.type === 'TOOL_CALL_START') {
+            this.workspace.collaboration.stream(
+              execution.id,
+              `Preparing tool ${event.toolCallName}…`,
+              '',
+            );
+          } else if (event.type === 'TOOL_CALL_END') {
+            this.workspace.collaboration.stream(
+              execution.id,
+              'Tool running…',
+              '',
+            );
+          } else if (event.type === 'TOOL_CALL_RESULT') {
+            this.workspace.collaboration.stream(
+              execution.id,
+              'Tool returned; continuing…',
+              '',
+            );
+          } else if (
+            event.type === 'REASONING_MESSAGE_START' ||
+            event.type === 'REASONING_START'
+          ) {
+            this.workspace.collaboration.stream(
+              execution.id,
+              'Considering the request…',
+              '',
+            );
+          }
+        }),
         aborted,
       ]);
       controller.signal.throwIfAborted();
@@ -355,8 +404,8 @@ export class CollaborationService {
           error instanceof Error ? error.message : 'Agent execution failed.',
         );
     } finally {
-      clearTimeout(timeout);
-      clearInterval(watcher);
+      if (timeout) clearTimeout(timeout);
+      if (watcher) clearInterval(watcher);
       stopWaiting?.();
       this.controllers.delete(execution.id);
     }
