@@ -568,7 +568,9 @@ export function ProjectConversations({
           >
             <ArrowLeft size={15} />
           </button>
-          <h2>{current.title}</h2>
+          <h2>
+            {current.id === kickoffConversationId ? 'Kickoff' : current.title}
+          </h2>
           <div className="conversation-view-heading-meta">
             <div className="conversation-view-heading-type">
               <span className="eyebrow">ORGANIZATIONAL CONVERSATION</span>

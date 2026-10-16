@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   BriefcaseBusiness,
   Check,
   ChevronRight,
   MessageCircle,
+  Pencil,
   Plus,
   Search,
   UserRound,
@@ -128,6 +129,10 @@ export function Office({
     workStyle: string;
   }>();
   const [project, setProject] = useState<MasterSession>();
+  const [showProjectNameDialog, setShowProjectNameDialog] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState('');
+  const [projectNameError, setProjectNameError] = useState('');
+  const [savingProjectName, setSavingProjectName] = useState(false);
   const [projectTab, setProjectTab] = useState<
     'overview' | 'team' | 'conversations' | 'activity'
   >('overview');
@@ -247,6 +252,28 @@ export function Office({
     setKickoffTargets([]);
     onNavigationRefresh();
     return kickoff;
+  };
+  const saveProjectName = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!project) return;
+    setProjectNameError('');
+    setSavingProjectName(true);
+    try {
+      const updated = await api<MasterSession>(
+        `/master-sessions/${project.id}`,
+        'PATCH',
+        { name: projectNameDraft.trim() },
+      );
+      setProject(updated);
+      setShowProjectNameDialog(false);
+      onNavigationRefresh();
+    } catch (err) {
+      setProjectNameError(
+        err instanceof Error ? err.message : 'Could not rename project.',
+      );
+    } finally {
+      setSavingProjectName(false);
+    }
   };
   const openProject = async (id: string) => {
     setError('');
@@ -529,7 +556,21 @@ export function Office({
       >
         {project ? (
           <div className="office-project-heading-copy">
-            <h1>{project.name}</h1>
+            <div className="office-project-heading-name">
+              <h1>{project.name}</h1>
+              <button
+                className="office-project-rename-button"
+                aria-label="Edit project name"
+                title="Edit project name"
+                onClick={() => {
+                  setProjectNameError('');
+                  setProjectNameDraft(project.name);
+                  setShowProjectNameDialog(true);
+                }}
+              >
+                <Pencil size={15} aria-hidden="true" />
+              </button>
+            </div>
             <div className="office-project-heading-meta">
               <span className="eyebrow">COLLABORATIVE DOTS WITH MEMORY</span>
               <p>
@@ -987,6 +1028,65 @@ export function Office({
         </>
       )}
 
+      {showProjectNameDialog && project && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowProjectNameDialog(false)}
+        >
+          <section
+            className="modal office-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-rename-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="modal-close icon-button"
+              aria-label="Close rename dialog"
+              onClick={() => setShowProjectNameDialog(false)}
+            >
+              <X size={18} />
+            </button>
+            <span className="eyebrow">PROJECT</span>
+            <h2 id="project-rename-title">Rename project</h2>
+            <form onSubmit={saveProjectName}>
+              <label className="field-label" htmlFor="project-rename-name">
+                Project name
+              </label>
+              <input
+                id="project-rename-name"
+                autoFocus
+                required
+                maxLength={120}
+                value={projectNameDraft}
+                onChange={(event) => setProjectNameDraft(event.target.value)}
+              />
+              {projectNameError && (
+                <p className="chat-error" role="alert">
+                  {projectNameError}
+                </p>
+              )}
+              <div className="office-modal-actions">
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={savingProjectName}
+                  onClick={() => setShowProjectNameDialog(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={!projectNameDraft.trim() || savingProjectName}
+                >
+                  {savingProjectName ? 'Saving…' : 'Save name'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
       {profileDraft && chosenDot && (
         <div
           className="modal-backdrop"

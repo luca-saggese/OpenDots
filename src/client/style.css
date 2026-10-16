@@ -4678,11 +4678,46 @@ h3 {
   gap: clamp(20px, 4vw, 56px);
   min-width: 0;
 }
-.office-project-heading-copy h1 {
-  flex: 0 0 auto;
+.office-project-heading-name {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.office-project-heading-name h1 {
+  flex: 0 1 auto;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   font-size: clamp(36px, 4.5vw, 54px);
   letter-spacing: -0.045em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.office-project-rename-button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--muted);
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s,
+    background 0.15s;
+}
+.office-project-heading-name:hover .office-project-rename-button,
+.office-project-heading-name:focus-within .office-project-rename-button {
+  opacity: 1;
+}
+.office-project-rename-button:hover:not(:disabled),
+.office-project-rename-button:focus-visible {
+  background: var(--background);
+  color: var(--accent);
 }
 .office-project-heading-meta {
   display: grid;
@@ -5238,6 +5273,12 @@ h3 {
 .office-modal {
   max-height: 85vh;
   overflow: auto;
+}
+.office-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
 }
 .office-template-list {
   max-height: 280px;
