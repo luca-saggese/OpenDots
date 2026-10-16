@@ -5402,15 +5402,29 @@ h3 {
   overflow: hidden;
 }
 .office-page.has-project .project-kickoff-card {
-  flex: 0 1 auto;
-  max-height: min(36%, 280px);
+  flex: 0 0 auto;
   gap: 12px;
   overflow: auto;
   margin-bottom: 0;
   padding: 14px;
 }
-.office-page.has-project .organizational-messages > .kickoff-agenda.is-empty {
-  flex: 1 0 auto;
+.office-page.has-project .project-kickoff-card.has-messages {
+  max-height: min(36%, 280px);
+}
+.office-page.has-project .project-kickoff-card.is-empty {
+  flex: 1 1 0;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  min-height: 0;
+  max-height: none;
+}
+.office-page.has-project .kickoff-agenda.is-empty {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+}
+.office-page.has-project .kickoff-agenda.is-empty pre {
+  min-height: 0;
+  overflow: auto;
 }
 .office-page.has-project .organizational-messages {
   flex: 1 1 0;
@@ -5421,6 +5435,9 @@ h3 {
   padding: 12px;
   border-radius: 8px;
   background: color-mix(in srgb, var(--background) 35%, var(--surface));
+}
+.office-page.has-project .organizational-messages.is-empty-kickoff {
+  display: none;
 }
 .office-page.has-project .conversation-empty {
   min-height: 0;
