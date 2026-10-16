@@ -617,10 +617,8 @@ export function ProjectConversations({
         </div>
         <div className="conversation-layout">
           <div className="conversation-main">
-            {current.id === kickoffConversationId && (
-              <section
-                className={`project-kickoff-card ${hasVisibleMessages ? 'has-messages' : 'is-empty'}`}
-              >
+            {current.id === kickoffConversationId && !hasVisibleMessages && (
+              <section className="project-kickoff-card is-empty">
                 <div className="project-kickoff-heading">
                   <div>
                     <span className="eyebrow">PROJECT KICKOFF</span>
@@ -656,23 +654,10 @@ export function ProjectConversations({
                       })}
                   </div>
                 </div>
-                {hasVisibleMessages ? (
-                  <details
-                    className="kickoff-agenda in-history"
-                    open={kickoffAgendaExpanded}
-                    onToggle={(event) =>
-                      setKickoffAgendaExpanded(event.currentTarget.open)
-                    }
-                  >
-                    <summary>Kickoff agenda</summary>
-                    <pre>{kickoffAgenda}</pre>
-                  </details>
-                ) : (
-                  <section className="kickoff-agenda is-empty">
-                    <b>Proposed agenda</b>
-                    <pre>{kickoffAgenda}</pre>
-                  </section>
-                )}
+                <section className="kickoff-agenda is-empty">
+                  <b>Proposed agenda</b>
+                  <pre>{kickoffAgenda}</pre>
+                </section>
                 {kickoffStarted ? (
                   <p className="kickoff-feedback" role="status">
                     {kickoffTargets.length
@@ -711,6 +696,18 @@ export function ProjectConversations({
               className={`organizational-messages ${current.id === kickoffConversationId && !hasVisibleMessages ? 'is-empty-kickoff' : ''}`}
               aria-live="polite"
             >
+              {current.id === kickoffConversationId && hasVisibleMessages && (
+                <details
+                  className="kickoff-agenda in-history"
+                  open={kickoffAgendaExpanded}
+                  onToggle={(event) =>
+                    setKickoffAgendaExpanded(event.currentTarget.open)
+                  }
+                >
+                  <summary>Kickoff agenda</summary>
+                  <pre>{kickoffAgenda}</pre>
+                </details>
+              )}
               {hasOlder && (
                 <button
                   className="secondary-button load-older"
