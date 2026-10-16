@@ -5387,7 +5387,9 @@ h3 {
 }
 .conversation-participant {
   display: grid;
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 10px;
   padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
@@ -5396,7 +5398,6 @@ h3 {
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  width: 100%;
   min-width: 0;
 }
 .conversation-participant-identity > .mascot.small,
@@ -5435,12 +5436,10 @@ h3 {
   font-size: 11px;
 }
 .conversation-participant-actions {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding-left: 46px;
 }
 .conversation-participant-actions .conversation-participant-talk {
   width: 32px;
@@ -5451,12 +5450,21 @@ h3 {
   background: var(--background);
   color: inherit;
 }
-.conversation-role-field {
+.conversation-participant-role {
   display: grid;
-  gap: 3px;
+  grid-column: 1 / -1;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
   min-width: 0;
+  padding-left: 46px;
   color: var(--muted);
   font-size: 10px;
+  font-weight: 550;
+}
+.conversation-participant-role > b {
+  color: inherit;
+  font-size: 11px;
   font-weight: 550;
 }
 .conversation-role-select {
@@ -5467,6 +5475,7 @@ h3 {
 .conversation-role-select select {
   width: 100%;
   min-width: 0;
+  max-width: 160px;
   padding: 6px 27px 6px 9px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -5488,7 +5497,6 @@ h3 {
 .conversation-participant-actions .danger-text {
   width: 32px;
   height: 32px;
-  justify-self: end;
   padding: 0;
   border: 1px solid color-mix(in srgb, #a53636 22%, var(--border));
   border-radius: 8px;

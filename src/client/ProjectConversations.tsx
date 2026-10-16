@@ -844,9 +844,7 @@ export function ProjectConversations({
                     )}
                     <span className="conversation-participant-details">
                       <b>{participant.name}</b>
-                      <small>
-                        {participant.role} · {participant.status}
-                      </small>
+                      <small>{participant.status}</small>
                     </span>
                   </div>
                   {agent && (
@@ -860,25 +858,6 @@ export function ProjectConversations({
                         <MessageCircle size={15} aria-hidden="true" />
                       </button>
                       {participant.role !== 'owner' && (
-                        <label className="conversation-role-field">
-                          <span>Role</span>
-                          <span className="conversation-role-select">
-                            <select
-                              aria-label={`Role for ${participant.name}`}
-                              value={participant.role}
-                              onChange={(event) =>
-                                void updateRole(agent.id, event.target.value)
-                              }
-                            >
-                              <option value="participant">Participant</option>
-                              <option value="moderator">Moderator</option>
-                              <option value="observer">Observer</option>
-                            </select>
-                            <ChevronDown size={14} aria-hidden="true" />
-                          </span>
-                        </label>
-                      )}
-                      {participant.role !== 'owner' && (
                         <button
                           className="quiet-button danger-text conversation-participant-remove"
                           aria-label={`Remove ${participant.name}`}
@@ -890,6 +869,30 @@ export function ProjectConversations({
                       )}
                     </div>
                   )}
+                  <div className="conversation-participant-role">
+                    <span>Role</span>
+                    {agent && participant.role !== 'owner' ? (
+                      <span className="conversation-role-select">
+                        <select
+                          aria-label={`Role for ${participant.name}`}
+                          value={participant.role}
+                          onChange={(event) =>
+                            void updateRole(agent.id, event.target.value)
+                          }
+                        >
+                          <option value="participant">Participant</option>
+                          <option value="moderator">Moderator</option>
+                          <option value="observer">Observer</option>
+                        </select>
+                        <ChevronDown size={14} aria-hidden="true" />
+                      </span>
+                    ) : (
+                      <b>
+                        {participant.role.charAt(0).toUpperCase() +
+                          participant.role.slice(1)}
+                      </b>
+                    )}
+                  </div>
                 </article>
               );
             })}
