@@ -5280,8 +5280,10 @@ h3 {
   border-bottom-color: var(--accent);
 }
 .main-content.office-page.has-project {
-  padding-top: 22px;
-  padding-bottom: 32px;
+  padding-top: 11px;
+  padding-right: clamp(9px, 1.5vw, 24px);
+  padding-bottom: 16px;
+  padding-left: clamp(9px, 1.5vw, 24px);
 }
 .office-page.has-project > .office-heading {
   margin-bottom: 16px;
