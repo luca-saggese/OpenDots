@@ -1,6 +1,5 @@
 import { openPageLink } from './page-navigation';
 import { CommandPalette } from './CommandPalette';
-import { SpaceNav } from './SpaceNav';
 import { SpaceWorkspace } from './SpaceWorkspace';
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { CopilotKitProvider } from '@copilotkit/react-core/v2';
@@ -33,6 +32,7 @@ import type {
   Result,
   State,
   WorkspaceState,
+  OrganizationalConversation,
 } from '../shared/types';
 import { api, ApiError, authHeaders, setToken } from './api';
 import { trackSetupStep } from './setup-telemetry';
@@ -52,6 +52,7 @@ import { TaskActions } from './TaskActions';
 import { WorkspaceDialog, type Dialog } from './WorkspaceDialog';
 import { submitComposerOnEnter } from './chat-composer';
 import { Office } from './Office';
+import { OfficeSidebar } from './OfficeSidebar';
 
 function describeFailure(error: unknown, fallback: string) {
   return {
@@ -71,6 +72,25 @@ export function App() {
   >('chat');
   const dirtyPage = useRef(false);
   const [spaceId, setSpaceId] = useState('');
+  const [officeNavigation, setOfficeNavigation] = useState<{
+    projectId: string;
+    conversationId?: string;
+    tab: 'overview' | 'team' | 'conversations';
+    requestId: string;
+  }>();
+  const [activeOfficeProjectId, setActiveOfficeProjectId] = useState<string>();
+  const [activeOfficeConversationId, setActiveOfficeConversationId] =
+    useState<string>();
+  const [officeProfileDotId, setOfficeProfileDotId] = useState<string>();
+  const [officeProfileSignal, setOfficeProfileSignal] = useState(0);
+  const [officeHomeSignal, setOfficeHomeSignal] = useState(0);
+  const [officeNavigationRefresh, setOfficeNavigationRefresh] = useState(0);
+  const refreshOfficeNavigation = useCallback(
+    () => setOfficeNavigationRefresh((value) => value + 1),
+    [],
+  );
+  const [officeCreateProjectSignal, setOfficeCreateProjectSignal] = useState(0);
+  const [officeCreateDotSignal, setOfficeCreateDotSignal] = useState(0);
   const [pageId, setPageId] = useState<string>();
   const setDirtyPage = useCallback((value: boolean) => {
     dirtyPage.current = value;
@@ -243,6 +263,33 @@ export function App() {
     setMobile(false);
     setPendingPrompt(undefined);
   };
+  const openOfficeProject = (
+    projectId: string,
+    conversationId?: string,
+    tab: 'overview' | 'team' | 'conversations' = 'conversations',
+  ) => {
+    setOfficeNavigation({
+      projectId,
+      conversationId,
+      tab,
+      requestId: crypto.randomUUID(),
+    });
+    setActiveOfficeProjectId(projectId);
+    setActiveOfficeConversationId(conversationId);
+    setView('office');
+    setMobile(false);
+  };
+  const openOfficeDirect = async (
+    projectId: string,
+    sessionAgentId: string,
+  ) => {
+    const conversation = await api<OrganizationalConversation>(
+      `/master-sessions/${projectId}/conversations/direct`,
+      'POST',
+      { sessionAgentId },
+    );
+    openOfficeProject(projectId, conversation.id, 'conversations');
+  };
   const newConversation = async (text?: string) => {
     if (!dot || !configured || busy) return;
     setBusy(true);
@@ -261,30 +308,6 @@ export function App() {
     } catch (e) {
       setError(
         e instanceof Error ? e.message : 'Could not create the conversation.',
-      );
-    } finally {
-      setBusy(false);
-    }
-  };
-  const startDotChat = async (dotId: string) => {
-    const target = workspace?.dots.find((item) => item.id === dotId);
-    if (!target || !configured || busy) return;
-    setBusy(true);
-    setError('');
-    try {
-      const next = await api<Conversation>('/conversations', 'POST', {
-        dotId: target.id,
-        title: 'Project conversation',
-      });
-      await refresh();
-      setSelectedDot(target.id);
-      setSelectedThread(next.id);
-      setPendingPrompt(undefined);
-      setView('chat');
-      setMobile(false);
-    } catch (e) {
-      setError(
-        e instanceof Error ? e.message : 'Could not open this Dot chat.',
       );
     } finally {
       setBusy(false);
@@ -366,16 +389,15 @@ export function App() {
           <PanelLeft size={18} />
         </button>
         <button
-          aria-label="New chat"
-          disabled={!configured}
-          onClick={() => void newConversation()}
-        >
-          <Plus size={19} />
-        </button>
-        <button
           aria-label="Open Spaces"
           onClick={() => {
-            if (workspace.spaces[0]) openPage(workspace.spaces[0].id);
+            const nativeSpace = workspace.spaces.find(
+              (space) =>
+                !workspace.masterSessions?.some(
+                  (project) => project.spaceId === space.id,
+                ),
+            );
+            if (nativeSpace) openPage(nativeSpace.id);
           }}
         >
           <Folder size={18} />
@@ -429,72 +451,68 @@ export function App() {
           </span>
           OpenDots<span className="wordmark-dot">•</span>
         </button>
-        <button
-          className="new-chat nav-item"
-          disabled={!configured}
-          onClick={() => void newConversation()}
-        >
-          <Plus size={17} />
-          <span>New chat</span>
-        </button>
-        <div className="spaces-heading nav-label">
-          DOTS
-          <button
-            className="icon-button"
-            aria-label="Create Dot"
-            onClick={() =>
-              setDialog({ type: 'dot', spaceId: workspace.spaces[0].id })
-            }
-          >
-            <Plus size={14} />
-          </button>
-        </div>
-        <nav className="dots-nav" aria-label="Dots">
-          {workspace.dots.map((item) => (
-            <div className="dot-nav-row" key={item.id}>
-              <button
-                className={`dot-nav ${dot.id === item.id && view === 'chat' ? 'active' : ''}`}
-                aria-current={
-                  dot.id === item.id && view === 'chat' ? 'page' : undefined
-                }
-                onClick={() => chooseDot(item)}
-              >
-                <Mascot identity={item.id} name={item.name} small decorative />
-                <span>{item.name}</span>
-              </button>
-              <button
-                className="icon-button dot-settings"
-                aria-label={`Edit ${item.name} settings`}
-                onClick={() =>
-                  setDialog({ type: 'dot', dot: item, spaceId: item.spaceId })
-                }
-              >
-                <MoreHorizontal size={15} />
-              </button>
-            </div>
-          ))}
-        </nav>
-        <div className="spaces-heading nav-label">
-          SPACES
-          <button
-            className="icon-button"
-            aria-label="Create Space"
-            onClick={() => setDialog({ type: 'space' })}
-          >
-            <Plus size={14} />
-          </button>
-        </div>
-        <nav className="spaces-nav" aria-label="Spaces">
-          {workspace.spaces.map((space) => (
-            <SpaceNav
-              key={space.id}
-              space={space}
-              active={view === 'space' && spaceId === space.id}
-              pageId={pageId}
-              onOpen={(id) => openPage(space.id, id)}
-            />
-          ))}
-        </nav>
+        <OfficeSidebar
+          spaces={workspace.spaces}
+          dots={workspace.dots}
+          activeProjectId={
+            view === 'office' ? activeOfficeProjectId : undefined
+          }
+          activeConversationId={
+            view === 'office' ? activeOfficeConversationId : undefined
+          }
+          refreshSignal={officeNavigationRefresh}
+          officeActive={view === 'office' && !activeOfficeProjectId}
+          activeSpaceId={view === 'space' ? spaceId : undefined}
+          onOpenOffice={() => {
+            setOfficeNavigation(undefined);
+            setActiveOfficeProjectId(undefined);
+            setActiveOfficeConversationId(undefined);
+            setOfficeProfileDotId(undefined);
+            setOfficeHomeSignal((value) => value + 1);
+            setView('office');
+            setMobile(false);
+          }}
+          onCreateProject={() => {
+            setOfficeCreateProjectSignal((value) => value + 1);
+            setView('office');
+            setMobile(false);
+          }}
+          onCreateDot={() => {
+            setOfficeCreateDotSignal((value) => value + 1);
+            setView('office');
+            setMobile(false);
+          }}
+          onEditDot={(id) => {
+            const target = workspace.dots.find((item) => item.id === id);
+            if (target)
+              setDialog({ type: 'dot', dot: target, spaceId: target.spaceId });
+          }}
+          onOpenNativeDot={(id) => {
+            const target = workspace.dots.find((item) => item.id === id);
+            if (target) chooseDot(target);
+            setMobile(false);
+          }}
+          onCreateSpace={() => setDialog({ type: 'space' })}
+          onNewNativeChat={() => void newConversation()}
+          nativeChatEnabled={configured}
+          onOpenProject={(id, tab) => openOfficeProject(id, undefined, tab)}
+          onOpenConversation={(projectId, conversationId) =>
+            openOfficeProject(projectId, conversationId, 'conversations')
+          }
+          onOpenDotProfile={(id) => {
+            setOfficeProfileDotId(id);
+            setOfficeProfileSignal((value) => value + 1);
+            setOfficeNavigation(undefined);
+            setActiveOfficeProjectId(undefined);
+            setView('office');
+            setMobile(false);
+          }}
+          onOpenDirect={openOfficeDirect}
+          onOpenSpace={(id) => {
+            openPage(id);
+            setMobile(false);
+          }}
+        />
         {configured ? (
           <ThreadList
             dotId={dot.id}
@@ -518,16 +536,6 @@ export function App() {
           </div>
         )}
         <div className="sidebar-bottom">
-          <button
-            className={`nav-item ${view === 'office' ? 'active' : ''}`}
-            onClick={() => {
-              setView('office');
-              setMobile(false);
-            }}
-          >
-            <BriefcaseBusiness size={17} />
-            <span>My Office</span>
-          </button>
           <button
             className={`nav-item ${view === 'inbox' ? 'active' : ''}`}
             onClick={() => {
@@ -858,8 +866,17 @@ export function App() {
           <Office
             workspace={workspace}
             onRefresh={refresh}
-            onChatDot={(id) => void startDotChat(id)}
             onOpenSpace={(id) => openPage(id)}
+            navigationRequest={officeNavigation}
+            initialCollaboratorId={officeProfileDotId}
+            profileSignal={officeProfileSignal}
+            homeSignal={officeHomeSignal}
+            createProjectSignal={officeCreateProjectSignal}
+            createDotSignal={officeCreateDotSignal}
+            onProjectChange={setActiveOfficeProjectId}
+            onConversationChange={setActiveOfficeConversationId}
+            onOpenDirect={openOfficeDirect}
+            onNavigationRefresh={refreshOfficeNavigation}
           />
         ) : (
           <main className="main-content">

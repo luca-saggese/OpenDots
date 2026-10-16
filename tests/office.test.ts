@@ -96,6 +96,139 @@ it('creates a permanent Dot from a Member Template with customization separate f
   expect(workspace.dot(result.dot.id)).toEqual(result.dot);
 });
 
+it('returns a single ACL-filtered Office navigation summary for projects, members, and conversations', async () => {
+  const { app, workspace } = fixture();
+  const projectSpace = workspace.createSpace('Write a book', 'Project space.');
+  const secondProjectSpace = workspace.createSpace(
+    'Research space',
+    'Second project space.',
+  );
+  const otherSpace = workspace.createSpace('Everyday', 'Native space.');
+  const first = workspace.createMasterSession(projectSpace.id, 'A new book');
+  const second = workspace.createMasterSession(
+    secondProjectSpace.id,
+    'Research',
+  );
+  const dot = workspace.createDot(
+    projectSpace.id,
+    'Nova',
+    'Coordinates project work.',
+    false,
+    false,
+  );
+  workspace.updateDot(dot.id, {
+    ...dot,
+    spaceIds: [...dot.spaceIds, secondProjectSpace.id],
+  });
+  const firstAgent = workspace.addSessionAgent(
+    first.id,
+    dot.id,
+    'Director',
+    'Coordinate the book.',
+  );
+  workspace.addSessionAgent(
+    second.id,
+    dot.id,
+    'Researcher',
+    'Research source material.',
+  );
+  const kickoff = await app.request(
+    `/api/office/projects/${first.id}/kickoff`,
+    post({}, 'PUT'),
+  );
+  expect(kickoff.status).toBe(200);
+  const privateResponse = await app.request(
+    `/api/master-sessions/${first.id}/conversations/direct`,
+    post({ sessionAgentId: firstAgent.id }),
+  );
+  expect(privateResponse.status).toBe(200);
+  const privateConversation = await privateResponse.json();
+  const repeatedDirect = await app.request(
+    `/api/master-sessions/${first.id}/conversations/direct`,
+    post({ sessionAgentId: firstAgent.id }),
+  );
+  expect((await repeatedDirect.json()).id).toBe(privateConversation.id);
+
+  const agentOnly = workspace.createOrganizationalConversation({
+    masterSessionId: first.id,
+    title: 'Internal agent discussion',
+    kind: 'agent_only',
+    visibility: 'restricted',
+    createdByType: 'session_agent',
+    createdById: firstAgent.id,
+    participants: [
+      { participantType: 'session_agent', participantId: firstAgent.id },
+      {
+        participantType: 'session_agent',
+        participantId: workspace.addSessionAgent(
+          first.id,
+          workspace.createDot(
+            projectSpace.id,
+            'Sage',
+            'Plans story structure.',
+            false,
+            false,
+          ).id,
+          'Plot Architect',
+          'Shape story structure.',
+        ).id,
+      },
+    ],
+  });
+
+  const response = await app.request('/api/office/navigation');
+  expect(response.status).toBe(200);
+  const navigation = await response.json();
+  expect(navigation.projectSpaceIds).toContain(projectSpace.id);
+  expect(navigation.projectSpaceIds).toContain(secondProjectSpace.id);
+  expect(navigation.projectSpaceIds).not.toContain(otherSpace.id);
+  expect(
+    navigation.projects.map(
+      (item: { project: { id: string } }) => item.project.id,
+    ),
+  ).toEqual([first.id, second.id]);
+  const project = navigation.projects.find(
+    (item: { project: { id: string } }) => item.project.id === first.id,
+  );
+  expect(project.kickoffConversationId).toBe(
+    (await kickoff.json()).conversation.id,
+  );
+  expect(
+    project.members.map((item: { agent: { role: string } }) => item.agent.role),
+  ).toContain('Director');
+  expect(
+    project.conversations.map(
+      (item: { conversation: { id: string } }) => item.conversation.id,
+    ),
+  ).toContain(privateConversation.id);
+  expect(
+    project.conversations.map(
+      (item: { conversation: { id: string } }) => item.conversation.id,
+    ),
+  ).not.toContain(agentOnly.id);
+  expect(
+    navigation.collaborators.filter(
+      (item: { dot: { id: string } }) => item.dot.id === dot.id,
+    ),
+  ).toHaveLength(1);
+  expect(
+    navigation.projects.find(
+      (item: { project: { id: string } }) => item.project.id === second.id,
+    ).members[0].agent.role,
+  ).toBe('Researcher');
+  workspace.setMasterSessionStatus(second.id, 'archived');
+  const archivedNavigation = await (
+    await app.request('/api/office/navigation')
+  ).json();
+  expect(
+    archivedNavigation.projects.map(
+      (item: { project: { id: string } }) => item.project.id,
+    ),
+  ).not.toContain(second.id);
+  expect(archivedNavigation.projectSpaceIds).toContain(secondProjectSpace.id);
+  expect(archivedNavigation.archivedProjectCount).toBe(1);
+});
+
 it('saves wizard AGENT and SOUL edits separately from project mandate and keeps archetype origin', async () => {
   const { app, workspace } = fixture();
   const response = await app.request(

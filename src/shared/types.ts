@@ -328,3 +328,29 @@ export interface WorkspaceState {
   setup: SetupStatus;
   calls: CallReceipt[];
 }
+
+export interface OfficeNavigationConversation {
+  conversation: OrganizationalConversation;
+  participants: Array<{
+    participantId: string;
+    name: string;
+    role: ConversationParticipantRole;
+  }>;
+  lastMessage: Pick<OrganizationalMessage, 'content' | 'createdAt'> | null;
+}
+export interface OfficeNavigationProject {
+  project: MasterSession;
+  space: Space;
+  members: Array<{
+    agent: SessionAgent;
+    dot: Dot;
+  }>;
+  conversations: OfficeNavigationConversation[];
+  kickoffConversationId?: string;
+}
+export interface OfficeNavigationSummary {
+  projects: OfficeNavigationProject[];
+  projectSpaceIds: string[];
+  archivedProjectCount: number;
+  collaborators: Array<{ dot: Dot; profile: DotProfile }>;
+}

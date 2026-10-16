@@ -85,6 +85,15 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       calls: platform.workspace.calls(),
     }),
   );
+  app.get('/office/navigation', (c) => {
+    try {
+      return c.json(
+        platform.workspace.officeNavigationSummary(platform.workspace.ownerId),
+      );
+    } catch (error) {
+      return sessionError(c, error);
+    }
+  });
   app.get('/master-sessions', (c) =>
     c.json(platform.workspace.masterSessions()),
   );

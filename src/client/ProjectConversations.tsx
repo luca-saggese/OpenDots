@@ -55,7 +55,10 @@ export function ProjectConversations({
   kickoffStarted,
   kickoffTargets,
   onStartKickoff,
-  onChatDot,
+  requestedConversationId,
+  onConversationChange,
+  onNavigationRefresh,
+  onOpenDirect,
 }: {
   masterSessionId: string;
   agents: SessionAgent[];
@@ -65,7 +68,10 @@ export function ProjectConversations({
   kickoffStarted: boolean;
   kickoffTargets: string[];
   onStartKickoff: () => Promise<string[]>;
-  onChatDot: (dotId: string) => void;
+  requestedConversationId?: string;
+  onConversationChange: (conversationId?: string) => void;
+  onNavigationRefresh: () => void;
+  onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
 }) {
   const [rows, setRows] = useState<Summary[]>([]);
   const [selected, setSelected] = useState<Summary>();
@@ -202,6 +208,7 @@ export function ProjectConversations({
         `/master-sessions/${masterSessionId}/conversation-summaries`,
       );
       setRows(data);
+      onNavigationRefresh();
       setSelected((current) =>
         current
           ? data.find((row) => row.conversation.id === current.conversation.id)
@@ -216,13 +223,14 @@ export function ProjectConversations({
     } finally {
       setLoading(false);
     }
-  }, [masterSessionId]);
+  }, [masterSessionId, onNavigationRefresh]);
   useEffect(() => {
     setLoading(true);
     void loadRows();
   }, [loadRows]);
   const openConversation = async (row: Summary) => {
     activeConversation.current = row.conversation.id;
+    onConversationChange(row.conversation.id);
     setError('');
     setNotice('');
     setSelected(row);
@@ -271,6 +279,17 @@ export function ProjectConversations({
         setLoadingMessages(false);
     }
   };
+  const openDirect = async (sessionAgentId: string) => {
+    try {
+      await onOpenDirect(masterSessionId, sessionAgentId);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Could not open this project conversation.',
+      );
+    }
+  };
   const startKickoff = async () => {
     if (!kickoffConversationId || kickoffStarted || startingKickoff) return;
     setStartingKickoff(true);
@@ -300,6 +319,14 @@ export function ProjectConversations({
     if (kickoff && selectedId !== kickoffConversationId)
       void openConversation(kickoff);
   }, [rows, kickoffConversationId, selectedId, openConversation]);
+  useEffect(() => {
+    if (!requestedConversationId || !rows.length) return;
+    const requested = rows.find(
+      (row) => row.conversation.id === requestedConversationId,
+    );
+    if (requested && selectedId !== requestedConversationId)
+      void openConversation(requested);
+  }, [rows, requestedConversationId, selectedId, openConversation]);
   const createConversation = async () => {
     setError('');
     setNotice('');
@@ -791,9 +818,6 @@ export function ProjectConversations({
                 participant.participantType === 'session_agent'
                   ? agents.find((item) => item.id === participant.participantId)
                   : undefined;
-              const dot =
-                agent &&
-                roster.find((item) => item.dot.id === agent.dotId)?.dot;
               return (
                 <article
                   className="conversation-participant"
@@ -809,9 +833,9 @@ export function ProjectConversations({
                     <>
                       <button
                         className="quiet-button"
-                        onClick={() => dot && onChatDot(dot.id)}
+                        onClick={() => void openDirect(agent.id)}
                       >
-                        Chat with Dot
+                        Talk with {participant.name}
                       </button>
                       {participant.role !== 'owner' && (
                         <select
@@ -1048,8 +1072,8 @@ export function ProjectConversations({
             )}
             {kind === 'plenary' && (
               <p className="muted">
-                The project’s active Session Agents will be included by the
-                server.
+                The project’s active collaborators will be included
+                automatically.
               </p>
             )}
             <button

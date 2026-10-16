@@ -366,6 +366,80 @@ export class WorkspaceStore {
         .all(dot.id),
     }));
   }
+  officeNavigationSummary(userId: string) {
+    if (userId !== this.ownerId) throw new Error('Office access denied.');
+    const spacesById = new Map(this.spaces().map((space) => [space.id, space]));
+    const projects = this.masterSessions()
+      .filter((project) => project.status !== 'archived')
+      .flatMap((project) => {
+        const space = spacesById.get(project.spaceId);
+        if (!space) return [];
+        const allConversations = this.conversationSummariesForOwner(
+          project.id,
+          userId,
+        ).sort(
+          (left, right) =>
+            right.conversation.updatedAt - left.conversation.updatedAt,
+        );
+        const kickoff = this.db
+          .prepare(
+            'SELECT id FROM session_conversations WHERE kickoffForMasterSession=?',
+          )
+          .get(project.id) as { id: string } | undefined;
+        const authorizedKickoff = allConversations.find(
+          (item) => item.conversation.id === kickoff?.id,
+        );
+        const visibleConversations = authorizedKickoff
+          ? [
+              authorizedKickoff,
+              ...allConversations.filter(
+                (item) => item.conversation.id !== kickoff?.id,
+              ),
+            ].slice(0, 6)
+          : allConversations.slice(0, 6);
+        const conversations = visibleConversations.map((item) => ({
+          conversation: item.conversation,
+          participants: item.participants.map((participant) => ({
+            participantId: participant.participantId,
+            name: participant.name,
+            role: participant.role,
+          })),
+          lastMessage: item.lastMessage
+            ? {
+                content: item.lastMessage.content.slice(0, 180),
+                createdAt: item.lastMessage.createdAt,
+              }
+            : null,
+        }));
+        return [
+          {
+            project,
+            space,
+            members: this.sessionAgents(project.id)
+              .filter(
+                (agent) =>
+                  agent.status === 'active' &&
+                  !!this.dot(agent.dotId) &&
+                  this.canAccessSpace(agent.dotId, project.spaceId),
+              )
+              .map((agent) => ({ agent, dot: this.dot(agent.dotId)! })),
+            conversations,
+            kickoffConversationId: authorizedKickoff ? kickoff?.id : undefined,
+          },
+        ];
+      });
+    return {
+      projects,
+      projectSpaceIds: this.masterSessions().map((project) => project.spaceId),
+      archivedProjectCount: this.masterSessions().filter(
+        (project) => project.status === 'archived',
+      ).length,
+      collaborators: this.dotProfiles().map(({ dot, profile }) => ({
+        dot,
+        profile,
+      })),
+    };
+  }
   updateDotProfile(
     dotId: string,
     patch: Pick<DotProfile, 'summary' | 'skills' | 'workStyle'>,

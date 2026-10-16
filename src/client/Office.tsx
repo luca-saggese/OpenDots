@@ -84,13 +84,36 @@ const makeSlot = (position?: TeamTemplatePosition): Slot => ({
 export function Office({
   workspace,
   onRefresh,
-  onChatDot,
   onOpenSpace,
+  navigationRequest,
+  initialCollaboratorId,
+  profileSignal,
+  homeSignal,
+  createProjectSignal,
+  createDotSignal,
+  onProjectChange,
+  onOpenDirect,
+  onConversationChange,
+  onNavigationRefresh,
 }: {
   workspace: WorkspaceState;
   onRefresh: () => Promise<void>;
-  onChatDot: (dotId: string) => void;
   onOpenSpace: (spaceId: string) => void;
+  navigationRequest?: {
+    projectId: string;
+    conversationId?: string;
+    tab: 'overview' | 'team' | 'conversations';
+    requestId: string;
+  };
+  initialCollaboratorId?: string;
+  profileSignal: number;
+  homeSignal: number;
+  createProjectSignal: number;
+  createDotSignal: number;
+  onProjectChange: (projectId?: string) => void;
+  onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
+  onConversationChange: (conversationId?: string) => void;
+  onNavigationRefresh: () => void;
 }) {
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [members, setMembers] = useState<MemberTemplate[]>([]);
@@ -113,6 +136,8 @@ export function Office({
   const [kickoffAgenda, setKickoffAgenda] = useState('');
   const [kickoffStarted, setKickoffStarted] = useState(false);
   const [kickoffTargets, setKickoffTargets] = useState<string[]>([]);
+  const [requestedConversationId, setRequestedConversationId] =
+    useState<string>();
   const [showWizard, setShowWizard] = useState(false);
   const [step, setStep] = useState(1);
   const [projectName, setProjectName] = useState('');
@@ -158,6 +183,35 @@ export function Office({
   useEffect(() => {
     void refreshOffice();
   }, []);
+  useEffect(() => {
+    if (createProjectSignal > 0) startWizard();
+  }, [createProjectSignal]);
+  useEffect(() => {
+    if (createDotSignal > 0) setAddDotDialog(true);
+  }, [createDotSignal]);
+  useEffect(() => {
+    if (homeSignal <= 0) return;
+    setProject(undefined);
+    setRequestedConversationId(undefined);
+    setShowWizard(false);
+    onProjectChange(undefined);
+  }, [homeSignal]);
+  useEffect(() => {
+    if (!initialCollaboratorId || !roster.length) return;
+    const collaborator = roster.find(
+      (item) => item.dot.id === initialCollaboratorId,
+    );
+    if (!collaborator) return;
+    setProject(undefined);
+    onProjectChange(undefined);
+    setShowWizard(false);
+    setSelectedDot(initialCollaboratorId);
+    setProfileDraft({
+      summary: collaborator.profile.summary,
+      skills: collaborator.profile.skills.join(', '),
+      workStyle: collaborator.profile.workStyle,
+    });
+  }, [initialCollaboratorId, profileSignal, roster]);
   const chosenDot = roster.find((item) => item.dot.id === selectedDot);
   const currentTeam = teams.find((item) => item.id === teamId);
   const projectTeamValid =
@@ -191,6 +245,7 @@ export function Office({
     setKickoffAgenda(kickoff.agenda);
     setKickoffStarted(kickoff.started);
     setKickoffTargets([]);
+    onNavigationRefresh();
     return kickoff;
   };
   const openProject = async (id: string) => {
@@ -203,6 +258,8 @@ export function Office({
         api<SessionAgent[]>(`/master-sessions/${id}/agents`),
       ]);
       setProject(details);
+      onProjectChange(id);
+      onConversationChange(undefined);
       setProjectAgents(agents);
       setKickoffConversationId(undefined);
       setKickoffAgenda('');
@@ -222,6 +279,21 @@ export function Office({
       setError(err instanceof Error ? err.message : 'Could not open project.');
     }
   };
+  useEffect(() => {
+    if (!navigationRequest) return;
+    let current = true;
+    void (async () => {
+      await openProject(navigationRequest.projectId);
+      if (!current) return;
+      setProjectTab(navigationRequest.tab);
+      if (navigationRequest.conversationId)
+        setRequestedConversationId(navigationRequest.conversationId);
+      else setRequestedConversationId(undefined);
+    })();
+    return () => {
+      current = false;
+    };
+  }, [navigationRequest?.requestId]);
   const startWizard = () => {
     setProject(undefined);
     setShowWizard(true);
@@ -308,6 +380,7 @@ export function Office({
         customization: newDotCustomization,
       });
       await Promise.all([refreshOffice(), onRefresh()]);
+      onNavigationRefresh();
       setAddDotDialog(false);
       setNewDotTemplate('');
       setNewDotName('');
@@ -347,6 +420,9 @@ export function Office({
       await refreshOffice();
       setShowWizard(false);
       setProject(result.masterSession);
+      onProjectChange(result.masterSession.id);
+      onConversationChange(undefined);
+      onNavigationRefresh();
       setProjectAgents(result.agents);
       setProjectTab('overview');
       try {
@@ -392,6 +468,7 @@ export function Office({
       setNewMandate('');
       await onRefresh();
       await refreshOffice();
+      onNavigationRefresh();
     } catch (err) {
       setError(
         err instanceof Error
@@ -434,6 +511,7 @@ export function Office({
       setNewMandate('');
       await onRefresh();
       await refreshOffice();
+      onNavigationRefresh();
     } catch (err) {
       setError(
         err instanceof Error ? err.message : 'Could not add this collaborator.',
@@ -486,6 +564,7 @@ export function Office({
             className="secondary-button"
             onClick={() => {
               setProject(undefined);
+              onProjectChange(undefined);
               setShowWizard(false);
             }}
           >
@@ -506,7 +585,7 @@ export function Office({
       {project ? (
         <section className="office-project">
           <nav className="project-tabs" aria-label="Project sections">
-            {(['overview', 'team', 'conversations', 'activity'] as const).map(
+            {(['conversations', 'team', 'overview', 'activity'] as const).map(
               (tab) => (
                 <button
                   key={tab}
@@ -546,7 +625,7 @@ export function Office({
                         .length
                     }
                   </b>
-                  <span>Active Session Agents</span>
+                  <span>Active project members</span>
                 </article>
               </div>
               <button
@@ -630,9 +709,9 @@ export function Office({
                       </p>
                       <button
                         className="secondary-button"
-                        onClick={() => onChatDot(agent.dotId)}
+                        onClick={() => void onOpenDirect(project.id, agent.id)}
                       >
-                        Chat with this Dot
+                        Talk with {name}
                       </button>
                       <button
                         className="text-button"
@@ -645,6 +724,7 @@ export function Office({
                               workStyle: person.profile.workStyle,
                             });
                           setProject(undefined);
+                          onProjectChange(undefined);
                         }}
                       >
                         Open collaborator profile <ChevronRight size={14} />
@@ -791,7 +871,10 @@ export function Office({
                 return result.targets;
               }}
               kickoffTargets={kickoffTargets}
-              onChatDot={onChatDot}
+              requestedConversationId={requestedConversationId}
+              onConversationChange={onConversationChange}
+              onNavigationRefresh={onNavigationRefresh}
+              onOpenDirect={onOpenDirect}
             />
           )}
           {projectTab === 'activity' && (
@@ -1505,9 +1588,9 @@ export function Office({
                   })}
                 </div>
                 <p className="muted">
-                  Confirmation creates the Space, Master Session, new Dots,
-                  profiles, and assignments together. Retrying uses the same
-                  request key.
+                  Confirmation creates the project workspace, any new
+                  collaborators, and their project assignments together.
+                  Retrying uses the same request key.
                 </p>
               </>
             )}
