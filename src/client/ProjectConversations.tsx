@@ -570,7 +570,10 @@ export function ProjectConversations({
           </button>
           <h2>{current.title}</h2>
           <div className="conversation-view-heading-meta">
-            <span>{current.kind}</span>
+            <div className="conversation-view-heading-type">
+              <span className="eyebrow">ORGANIZATIONAL CONVERSATION</span>
+              <span>{current.kind}</span>
+            </div>
             <small>
               {new Date(current.updatedAt).toLocaleString()} · {current.status}
             </small>

@@ -5438,8 +5438,9 @@ h3 {
   margin-bottom: 17px;
 }
 .conversation-view-heading h2 {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
+  max-width: 64%;
   margin: 0;
   overflow: hidden;
   font-size: clamp(20px, 2.4vw, 28px);
@@ -5455,12 +5456,23 @@ h3 {
 }
 .conversation-view-heading-meta {
   display: grid;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   gap: 2px;
-  max-width: 38%;
-  text-align: right;
+  min-width: 0;
+  max-width: 48%;
+  text-align: left;
 }
-.conversation-view-heading-meta > span {
+.conversation-view-heading-type {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+.conversation-view-heading-type .eyebrow {
+  flex: 0 0 auto;
+  font-size: 8px;
+}
+.conversation-view-heading-type > span:not(.eyebrow) {
   overflow: hidden;
   color: inherit;
   font-size: 14px;
@@ -5470,8 +5482,10 @@ h3 {
   white-space: nowrap;
 }
 .conversation-view-heading-meta small {
+  overflow: hidden;
   color: var(--muted);
   font-size: 10px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .conversation-layout {
