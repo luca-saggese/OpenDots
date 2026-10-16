@@ -4675,20 +4675,21 @@ h3 {
 .office-project-heading-copy {
   display: flex;
   align-items: center;
-  gap: clamp(20px, 4vw, 56px);
+  gap: clamp(10px, 1.2vw, 18px);
   min-width: 0;
 }
 .office-project-heading-name {
+  position: relative;
   display: flex;
   flex: 0 1 auto;
   align-items: center;
-  gap: 8px;
   min-width: 0;
 }
 .office-project-heading-name h1 {
   flex: 0 1 auto;
   min-width: 0;
   margin: 0;
+  padding-right: 7px;
   overflow: hidden;
   font-size: clamp(36px, 4.5vw, 54px);
   letter-spacing: -0.045em;
@@ -4696,12 +4697,15 @@ h3 {
   white-space: nowrap;
 }
 .office-project-rename-button {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  position: absolute;
+  right: -5px;
+  bottom: -2px;
+  z-index: 1;
+  width: 21px;
+  height: 21px;
   padding: 0;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 50%;
   background: var(--surface);
   color: var(--muted);
   opacity: 0;
@@ -4723,7 +4727,7 @@ h3 {
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding-left: clamp(16px, 2.5vw, 30px);
+  padding-left: clamp(10px, 1vw, 16px);
   border-left: 1px solid var(--border);
 }
 .office-project-heading-meta p {
@@ -5003,7 +5007,8 @@ h3 {
   color: var(--accent);
 }
 .office-wizard > .field-label,
-.office-modal > .field-label {
+.office-modal > .field-label,
+.office-modal form > .field-label {
   display: block;
   margin: 15px 0 6px;
 }
@@ -5384,7 +5389,41 @@ h3 {
 }
 .office-page.has-project .organizational-messages {
   gap: 8px;
+  min-height: 150px;
+  max-height: min(42vh, 420px);
   padding: 12px;
+}
+.office-page.has-project .conversation-empty {
+  min-height: 120px;
+}
+.office-page.has-project .organizational-composer {
+  gap: 7px;
+  padding: 10px;
+}
+.office-page.has-project .organizational-composer textarea {
+  min-height: 64px;
+}
+.office-page.has-project .publish-only {
+  width: fit-content;
+  max-width: 100%;
+}
+.office-page.has-project .publish-only input {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+}
+.office-page.has-project .organizational-composer-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.office-page.has-project .organizational-composer-actions small {
+  flex: 1 1 260px;
+}
+.office-page.has-project .organizational-composer-actions .primary {
+  flex: 0 0 auto;
 }
 .office-page.has-project .conversation-participants {
   padding: 10px;
@@ -5606,7 +5645,7 @@ h3 {
   background: var(--background);
   font: inherit;
 }
-.organizational-composer > div {
+.organizational-composer-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;

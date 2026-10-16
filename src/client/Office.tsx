@@ -131,6 +131,7 @@ export function Office({
   const [project, setProject] = useState<MasterSession>();
   const [showProjectNameDialog, setShowProjectNameDialog] = useState(false);
   const [projectNameDraft, setProjectNameDraft] = useState('');
+  const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('');
   const [projectNameError, setProjectNameError] = useState('');
   const [savingProjectName, setSavingProjectName] = useState(false);
   const [projectTab, setProjectTab] = useState<
@@ -262,7 +263,10 @@ export function Office({
       const updated = await api<MasterSession>(
         `/master-sessions/${project.id}`,
         'PATCH',
-        { name: projectNameDraft.trim() },
+        {
+          name: projectNameDraft.trim(),
+          description: projectDescriptionDraft.trim(),
+        },
       );
       setProject(updated);
       setShowProjectNameDialog(false);
@@ -560,15 +564,16 @@ export function Office({
               <h1>{project.name}</h1>
               <button
                 className="office-project-rename-button"
-                aria-label="Edit project name"
-                title="Edit project name"
+                aria-label="Edit project details"
+                title="Edit project details"
                 onClick={() => {
                   setProjectNameError('');
                   setProjectNameDraft(project.name);
+                  setProjectDescriptionDraft(project.description);
                   setShowProjectNameDialog(true);
                 }}
               >
-                <Pencil size={15} aria-hidden="true" />
+                <Pencil size={10} aria-hidden="true" />
               </button>
             </div>
             <div className="office-project-heading-meta">
@@ -1048,7 +1053,7 @@ export function Office({
               <X size={18} />
             </button>
             <span className="eyebrow">PROJECT</span>
-            <h2 id="project-rename-title">Rename project</h2>
+            <h2 id="project-rename-title">Edit project details</h2>
             <form onSubmit={saveProjectName}>
               <label className="field-label" htmlFor="project-rename-name">
                 Project name
@@ -1060,6 +1065,21 @@ export function Office({
                 maxLength={120}
                 value={projectNameDraft}
                 onChange={(event) => setProjectNameDraft(event.target.value)}
+              />
+              <label
+                className="field-label"
+                htmlFor="project-rename-description"
+              >
+                Description
+              </label>
+              <textarea
+                id="project-rename-description"
+                rows={4}
+                maxLength={4000}
+                value={projectDescriptionDraft}
+                onChange={(event) =>
+                  setProjectDescriptionDraft(event.target.value)
+                }
               />
               {projectNameError && (
                 <p className="chat-error" role="alert">

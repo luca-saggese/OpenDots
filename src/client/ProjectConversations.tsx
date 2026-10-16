@@ -779,7 +779,7 @@ export function ProjectConversations({
                   />
                   Publish without requesting responses
                 </label>
-                <div>
+                <div className="organizational-composer-actions">
                   <small>
                     {publishOnly
                       ? 'No collaborator will be activated.'
