@@ -664,6 +664,25 @@ export function ProjectConversations({
                 {notice}
               </p>
             )}
+            <CollaborationControls
+              snapshot={snapshot}
+              name={(agentId) => {
+                const agent = agents.find((item) => item.id === agentId);
+                return (
+                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
+                    .name ?? 'Collaborator'
+                );
+              }}
+              triggerMessageId={
+                messages
+                  .filter((message) => message.senderType === 'user')
+                  .at(-1)?.id
+              }
+              onAction={participationAction}
+              onSettings={(settings) =>
+                participationAction('/collaboration', settings)
+              }
+            />
             <div className="organizational-messages" aria-live="polite">
               {hasOlder && (
                 <button
@@ -804,25 +823,6 @@ export function ProjectConversations({
                 </div>
               </form>
             )}
-            <CollaborationControls
-              snapshot={snapshot}
-              name={(agentId) => {
-                const agent = agents.find((item) => item.id === agentId);
-                return (
-                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
-                    .name ?? 'Collaborator'
-                );
-              }}
-              triggerMessageId={
-                messages
-                  .filter((message) => message.senderType === 'user')
-                  .at(-1)?.id
-              }
-              onAction={participationAction}
-              onSettings={(settings) =>
-                participationAction('/collaboration', settings)
-              }
-            />
           </div>
           <aside className="conversation-participants">
             <div className="conversation-panel-heading">
