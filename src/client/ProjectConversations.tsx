@@ -72,7 +72,7 @@ export function ProjectConversations({
   kickoffTargets: string[];
   onStartKickoff: () => Promise<string[]>;
   requestedConversationId?: string;
-  onConversationChange: (conversationId?: string) => void;
+  onConversationChange: (conversationId?: string, title?: string) => void;
   onNavigationRefresh: () => void;
   onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
 }) {
@@ -245,7 +245,12 @@ export function ProjectConversations({
   }, [loadRows]);
   const openConversation = async (row: Summary) => {
     activeConversation.current = row.conversation.id;
-    onConversationChange(row.conversation.id);
+    onConversationChange(
+      row.conversation.id,
+      row.conversation.id === kickoffConversationId
+        ? 'Kickoff'
+        : row.conversation.title,
+    );
     setError('');
     setNotice('');
     setSelected(row);
@@ -594,6 +599,7 @@ export function ProjectConversations({
             onClick={() => {
               setSelected(undefined);
               activeConversation.current = undefined;
+              onConversationChange(undefined, undefined);
               void loadRows();
               setParticipants([]);
               setMessages([]);

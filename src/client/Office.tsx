@@ -9,7 +9,6 @@ import {
   Plus,
   Search,
   UserRound,
-  Users,
   X,
 } from 'lucide-react';
 import type {
@@ -113,7 +112,7 @@ export function Office({
   createDotSignal: number;
   onProjectChange: (projectId?: string) => void;
   onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
-  onConversationChange: (conversationId?: string) => void;
+  onConversationChange: (conversationId?: string, title?: string) => void;
   onNavigationRefresh: () => void;
 }) {
   const [roster, setRoster] = useState<RosterItem[]>([]);
@@ -606,7 +605,11 @@ export function Office({
                   key={tab}
                   className={projectTab === tab ? 'active' : ''}
                   aria-current={projectTab === tab ? 'page' : undefined}
-                  onClick={() => setProjectTab(tab)}
+                  onClick={() => {
+                    setProjectTab(tab);
+                    if (tab !== 'conversations')
+                      onConversationChange(undefined, undefined);
+                  }}
                 >
                   {tab}
                 </button>

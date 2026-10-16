@@ -81,6 +81,8 @@ export function App() {
   const [activeOfficeProjectId, setActiveOfficeProjectId] = useState<string>();
   const [activeOfficeConversationId, setActiveOfficeConversationId] =
     useState<string>();
+  const [activeOfficeConversationTitle, setActiveOfficeConversationTitle] =
+    useState<string>();
   const [officeProfileDotId, setOfficeProfileDotId] = useState<string>();
   const [officeProfileSignal, setOfficeProfileSignal] = useState(0);
   const [officeHomeSignal, setOfficeHomeSignal] = useState(0);
@@ -276,6 +278,7 @@ export function App() {
     });
     setActiveOfficeProjectId(projectId);
     setActiveOfficeConversationId(conversationId);
+    setActiveOfficeConversationTitle(undefined);
     setView('office');
     setMobile(false);
   };
@@ -607,27 +610,50 @@ export function App() {
             <PanelLeft size={18} />
           </button>
           <div className="breadcrumbs">
-            <span>
-              {view === 'space'
-                ? workspace.spaces.find((space) => space.id === spaceId)?.name
-                : view === 'office'
-                  ? 'My Office'
-                  : 'Dots'}
-            </span>
-            <span>/</span>
-            <strong>
-              {view === 'chat'
-                ? dot.name
-                : view === 'tasks'
-                  ? 'Activity'
-                  : view === 'inbox'
-                    ? 'Inbox'
-                    : view === 'space'
-                      ? 'Pages'
-                      : view === 'office'
-                        ? 'My Office'
-                        : 'Memories'}
-            </strong>
+            {view === 'office' && activeOfficeProjectId ? (
+              <>
+                <span>Projects</span>
+                <span>/</span>
+                <span>
+                  {workspace.masterSessions?.find(
+                    (project) => project.id === activeOfficeProjectId,
+                  )?.name ?? 'Project'}
+                </span>
+                {activeOfficeConversationId && (
+                  <>
+                    <span>/</span>
+                    <strong>
+                      {activeOfficeConversationTitle ?? 'Conversation'}
+                    </strong>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <span>
+                  {view === 'space'
+                    ? workspace.spaces.find((space) => space.id === spaceId)
+                        ?.name
+                    : view === 'office'
+                      ? 'My Office'
+                      : 'Dots'}
+                </span>
+                <span>/</span>
+                <strong>
+                  {view === 'chat'
+                    ? dot.name
+                    : view === 'tasks'
+                      ? 'Activity'
+                      : view === 'inbox'
+                        ? 'Inbox'
+                        : view === 'space'
+                          ? 'Pages'
+                          : view === 'office'
+                            ? 'My Office'
+                            : 'Memories'}
+                </strong>
+              </>
+            )}
           </div>
           <div className="top-actions">
             <button
@@ -873,7 +899,10 @@ export function App() {
             createProjectSignal={officeCreateProjectSignal}
             createDotSignal={officeCreateDotSignal}
             onProjectChange={setActiveOfficeProjectId}
-            onConversationChange={setActiveOfficeConversationId}
+            onConversationChange={(conversationId, title) => {
+              setActiveOfficeConversationId(conversationId);
+              setActiveOfficeConversationTitle(title);
+            }}
             onOpenDirect={openOfficeDirect}
             onNavigationRefresh={refreshOfficeNavigation}
           />
