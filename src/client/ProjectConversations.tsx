@@ -565,7 +565,6 @@ export function ProjectConversations({
             }}
           >
             <ArrowLeft size={15} />
-            All conversations
           </button>
           <div>
             <span className="eyebrow">
