@@ -3635,12 +3635,29 @@ h3 {
   gap: 2px;
   min-width: 0;
 }
-.office-nav-subheading {
+.office-nav-subheading-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
   padding: 5px 8px 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--muted);
   font-size: 9px;
   font-weight: 650;
   letter-spacing: 0.08em;
+  text-align: left;
+}
+.office-nav-subheading-toggle:hover:not(:disabled),
+.office-nav-subheading-toggle:focus-visible {
+  background: var(--surface);
+  color: var(--accent);
+}
+.office-nav-subheading-toggle > svg {
+  flex: 0 0 auto;
 }
 .office-project-child {
   display: flex;

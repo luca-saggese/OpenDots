@@ -385,6 +385,8 @@ function ProjectBranch({
   onShowLessTeam: () => void;
   onOpenDirect: (sessionAgentId: string) => void;
 }) {
+  const [conversationsOpen, setConversationsOpen] = useState(true);
+  const [teamOpen, setTeamOpen] = useState(true);
   const kickoff = item.conversations.find(
     (conversation) =>
       conversation.conversation.id === item.kickoffConversationId,
@@ -427,86 +429,121 @@ function ProjectBranch({
       {expanded && (
         <div className="office-project-children">
           <div className="office-project-child-group">
-            {(kickoff || visibleConversations.length > 0) && (
-              <div className="office-nav-subheading">CONVERSATIONS</div>
-            )}
-            {kickoff && (
-              <button
-                className={`office-project-child ${activeConversationId === kickoff.conversation.id ? 'active' : ''}`}
-                title={kickoff.conversation.title}
-                onClick={() => onOpenConversation(kickoff.conversation.id)}
-              >
-                <MessageCircle size={13} />
-                <span className="office-project-child-label">
-                  <span>Kickoff meeting</span>
-                  <small>{participantsLabel(kickoff.participants)}</small>
-                  {kickoff.lastMessage?.content && (
-                    <small className="office-project-last-message">
-                      {kickoff.lastMessage.content}
-                    </small>
-                  )}
-                </span>
-              </button>
-            )}
-            {visibleConversations.map((item) => (
-              <button
-                className={`office-project-child ${activeConversationId === item.conversation.id ? 'active' : ''}`}
-                key={item.conversation.id}
-                title={item.conversation.title}
-                onClick={() => onOpenConversation(item.conversation.id)}
-              >
-                <MessageCircle size={13} />
-                <span className="office-project-child-label">
-                  <span>{item.conversation.title}</span>
-                  <small>{participantsLabel(item.participants)}</small>
-                  {item.lastMessage?.content && (
-                    <small className="office-project-last-message">
-                      {item.lastMessage.content}
-                    </small>
-                  )}
-                </span>
-              </button>
-            ))}
-            {others.length > 3 && (
-              <button
-                className="office-nav-subtle"
-                onClick={showAll ? onShowLess : onShowAll}
-              >
-                {showAll ? 'Show fewer' : 'Show more'}
-              </button>
-            )}
             <button
-              className="office-project-child office-all-conversations"
-              onClick={onOpenAllConversations}
+              className="office-nav-subheading-toggle"
+              aria-expanded={conversationsOpen}
+              onClick={() => setConversationsOpen((open) => !open)}
             >
-              <MessageCircle size={13} />
-              <span>All conversations</span>
+              {conversationsOpen ? (
+                <ChevronDown size={12} aria-hidden="true" />
+              ) : (
+                <ChevronRight size={12} aria-hidden="true" />
+              )}
+              <span>CONVERSATIONS</span>
             </button>
+            {conversationsOpen && (
+              <>
+                {kickoff && (
+                  <button
+                    className={`office-project-child ${activeConversationId === kickoff.conversation.id ? 'active' : ''}`}
+                    title={kickoff.conversation.title}
+                    onClick={() => onOpenConversation(kickoff.conversation.id)}
+                  >
+                    <MessageCircle size={13} />
+                    <span className="office-project-child-label">
+                      <span>Kickoff meeting</span>
+                      <small>{participantsLabel(kickoff.participants)}</small>
+                      {kickoff.lastMessage?.content && (
+                        <small className="office-project-last-message">
+                          {kickoff.lastMessage.content}
+                        </small>
+                      )}
+                    </span>
+                  </button>
+                )}
+                {visibleConversations.map((item) => (
+                  <button
+                    className={`office-project-child ${activeConversationId === item.conversation.id ? 'active' : ''}`}
+                    key={item.conversation.id}
+                    title={item.conversation.title}
+                    onClick={() => onOpenConversation(item.conversation.id)}
+                  >
+                    <MessageCircle size={13} />
+                    <span className="office-project-child-label">
+                      <span>{item.conversation.title}</span>
+                      <small>{participantsLabel(item.participants)}</small>
+                      {item.lastMessage?.content && (
+                        <small className="office-project-last-message">
+                          {item.lastMessage.content}
+                        </small>
+                      )}
+                    </span>
+                  </button>
+                ))}
+                {others.length > 3 && (
+                  <button
+                    className="office-nav-subtle"
+                    onClick={showAll ? onShowLess : onShowAll}
+                  >
+                    {showAll ? 'Show fewer' : 'Show more'}
+                  </button>
+                )}
+                <button
+                  className="office-project-child office-all-conversations"
+                  onClick={onOpenAllConversations}
+                >
+                  <MessageCircle size={13} />
+                  <span>All conversations</span>
+                </button>
+              </>
+            )}
           </div>
           <div className="office-project-child-group">
-            <div className="office-nav-subheading">TEAM</div>
-            {team.map(({ agent, dot }) => (
-              <button
-                className="office-project-member"
-                key={agent.id}
-                title={`${dot.name} — ${agent.role}`}
-                onClick={() => onOpenDirect(agent.id)}
-                disabled={openingDirect === `${item.project.id}:${agent.id}`}
-              >
-                <Mascot identity={dot.id} name={dot.name} small decorative />
-                <span>
-                  <b>{dot.name}</b>
-                  <small>{agent.role}</small>
-                </span>
-              </button>
-            ))}
-            {item.members.length > 5 && (
-              <button
-                className="office-nav-subtle"
-                onClick={showAllTeam ? onShowLessTeam : onShowAllTeam}
-              >
-                {showAllTeam ? 'Show fewer members' : 'Show all members'}
-              </button>
+            <button
+              className="office-nav-subheading-toggle"
+              aria-expanded={teamOpen}
+              onClick={() => setTeamOpen((open) => !open)}
+            >
+              {teamOpen ? (
+                <ChevronDown size={12} aria-hidden="true" />
+              ) : (
+                <ChevronRight size={12} aria-hidden="true" />
+              )}
+              <span>TEAM</span>
+            </button>
+            {teamOpen && (
+              <>
+                {team.map(({ agent, dot }) => (
+                  <button
+                    className="office-project-member"
+                    key={agent.id}
+                    title={`${dot.name} — ${agent.role}`}
+                    onClick={() => onOpenDirect(agent.id)}
+                    disabled={
+                      openingDirect === `${item.project.id}:${agent.id}`
+                    }
+                  >
+                    <Mascot
+                      identity={dot.id}
+                      name={dot.name}
+                      small
+                      decorative
+                    />
+                    <span>
+                      <b>{dot.name}</b>
+                      <small>{agent.role}</small>
+                    </span>
+                  </button>
+                ))}
+                {item.members.length > 5 && (
+                  <button
+                    className="office-nav-subtle"
+                    onClick={showAllTeam ? onShowLessTeam : onShowAllTeam}
+                  >
+                    {showAllTeam ? 'Show fewer members' : 'Show all members'}
+                  </button>
+                )}
+              </>
             )}
           </div>
           <button
