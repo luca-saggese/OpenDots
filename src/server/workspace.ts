@@ -1,5 +1,6 @@
 import { ComputerStore } from './computer-store.js';
 import { CollaborationStore } from './collaboration-store.js';
+import { ProjectWorkStore } from './project-work-store.js';
 import { ConnectionStore } from './connection-store.js';
 import { Pages } from './pages.js';
 import { DatabaseSync } from 'node:sqlite';
@@ -35,6 +36,7 @@ import { memberTemplates, teamTemplates } from './office-templates.js';
 export class WorkspaceStore {
   private db: DatabaseSync;
   readonly collaboration: CollaborationStore;
+  readonly projectWork: ProjectWorkStore;
   private runningThreads = new Set<string>();
   readonly pages: Pages;
   readonly computers: ComputerStore;
@@ -219,6 +221,20 @@ export class WorkspaceStore {
         COMMIT;`);
     }
     this.collaboration = new CollaborationStore(this.db);
+    this.projectWork = new ProjectWorkStore(
+      this.db,
+      (masterSessionId, sessionAgentId) => {
+        const agent = this.sessionAgent(sessionAgentId);
+        const master = this.masterSession(masterSessionId);
+        return !!(
+          agent &&
+          master &&
+          agent.status === 'active' &&
+          agent.masterSessionId === masterSessionId &&
+          this.canAccessSpace(agent.dotId, master.spaceId)
+        );
+      },
+    );
     this.computers = new ComputerStore(this.db);
     this.connections = new ConnectionStore(this.db);
     this.pages = new Pages(this.db, (id) =>

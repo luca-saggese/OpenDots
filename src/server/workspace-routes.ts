@@ -1,6 +1,7 @@
 import { setupInputSchema } from './setup-telemetry.js';
 import { collaborationRoutes, mentionSchema } from './collaboration-routes.js';
 import { pageRoutes } from './page-routes.js';
+import { projectWorkRoutes } from './project-work-routes.js';
 import { searchWorkspace } from './search.js';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
@@ -59,6 +60,7 @@ const dotSchema = z
 export function workspaceRoutes(platform: Platform, voice: VoiceService) {
   const app = new Hono();
   app.route('/', pageRoutes(platform));
+  app.route('/', projectWorkRoutes(platform.projectWork, platform));
   app.post('/setup-telemetry', async (c) => {
     const parsed = setupInputSchema.safeParse(
       await c.req.json().catch(() => null),

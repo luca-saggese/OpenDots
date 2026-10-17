@@ -28,9 +28,11 @@ import {
   CollaborationService,
   type CollaborationRuntime,
 } from './collaboration.js';
+import { ProjectWorkService } from './project-work.js';
 export class Platform {
   private collaborationSecret = randomUUID();
   readonly collaboration: CollaborationService;
+  readonly projectWork: ProjectWorkService;
   private channelStartupFailed = false;
   readonly setupTelemetry: SetupTelemetry;
   readonly pages: PageService;
@@ -93,6 +95,7 @@ export class Platform {
         paused: () => store.settings().paused,
       },
     );
+    this.projectWork = new ProjectWorkService(workspace, this.collaboration);
     if (!config.intelligenceKey) return;
     this.intelligence = new CopilotKitIntelligence({
       apiKey: config.intelligenceKey,
@@ -233,8 +236,10 @@ export class Platform {
         throw error;
       }
     }
+    this.projectWork.start();
   }
   async stop() {
+    await this.projectWork.stop();
     this.collaboration.stop();
     await this.collaboration.idle();
     await this.setupTelemetry.stop();

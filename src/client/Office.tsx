@@ -25,6 +25,7 @@ import type {
 import { api } from './api';
 import { Mascot } from './Mascot';
 import { ProjectConversations } from './ProjectConversations';
+import { ProjectWork } from './ProjectWork';
 
 type RosterItem = {
   dot: Dot;
@@ -134,7 +135,7 @@ export function Office({
   const [projectNameError, setProjectNameError] = useState('');
   const [savingProjectName, setSavingProjectName] = useState(false);
   const [projectTab, setProjectTab] = useState<
-    'overview' | 'team' | 'conversations' | 'activity'
+    'overview' | 'team' | 'conversations' | 'work' | 'activity'
   >('overview');
   const [projectAgents, setProjectAgents] = useState<SessionAgent[]>([]);
   const [kickoffConversationId, setKickoffConversationId] = useState<string>();
@@ -599,22 +600,22 @@ export function Office({
       {project ? (
         <section className="office-project">
           <nav className="project-tabs" aria-label="Project sections">
-            {(['conversations', 'team', 'overview', 'activity'] as const).map(
-              (tab) => (
-                <button
-                  key={tab}
-                  className={projectTab === tab ? 'active' : ''}
-                  aria-current={projectTab === tab ? 'page' : undefined}
-                  onClick={() => {
-                    setProjectTab(tab);
-                    if (tab !== 'conversations')
-                      onConversationChange(undefined, undefined);
-                  }}
-                >
-                  {tab}
-                </button>
-              ),
-            )}
+            {(
+              ['conversations', 'work', 'team', 'overview', 'activity'] as const
+            ).map((tab) => (
+              <button
+                key={tab}
+                className={projectTab === tab ? 'active' : ''}
+                aria-current={projectTab === tab ? 'page' : undefined}
+                onClick={() => {
+                  setProjectTab(tab);
+                  if (tab !== 'conversations')
+                    onConversationChange(undefined, undefined);
+                }}
+              >
+                {tab}
+              </button>
+            ))}
           </nav>
           {projectTab === 'overview' && (
             <section className="project-overview">
@@ -905,6 +906,9 @@ export function Office({
               onNavigationRefresh={onNavigationRefresh}
               onOpenDirect={onOpenDirect}
             />
+          )}
+          {projectTab === 'work' && (
+            <ProjectWork masterSessionId={project.id} agents={projectAgents} />
           )}
           {projectTab === 'activity' && (
             <div className="large-empty">
