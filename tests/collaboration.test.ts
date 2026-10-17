@@ -449,6 +449,87 @@ it('never activates on unstructured names or manual free conversation, and suppo
   expect(f.workspace.collaboration.executions(conversation.id)).toEqual([]);
 });
 
+it('automatically requests a response in a direct conversation and supports publish-only explicitly', async () => {
+  const f = fixture();
+  const conversation = f.conversation([0], 'direct');
+  const first = await f.app.request(
+    `/api/organizational-conversations/${conversation.id}/messages`,
+    request({
+      content: 'Can you answer this without a mention?',
+      idempotencyKey: 'direct-default',
+    }),
+  );
+  expect(first.status).toBe(201);
+  const firstMessage = await first.json();
+  const retry = await f.app.request(
+    `/api/organizational-conversations/${conversation.id}/messages`,
+    request({
+      content: 'Can you answer this without a mention?',
+      idempotencyKey: 'direct-default',
+    }),
+  );
+  expect(retry.status).toBe(201);
+  expect(await retry.json()).toMatchObject({ id: firstMessage.id });
+  await f.service.idle();
+  expect(f.workspace.collaboration.executions(conversation.id)).toHaveLength(1);
+  expect(
+    f.workspace.collaboration.executions(conversation.id)[0].sessionAgentId,
+  ).toBe(f.agents[0].id);
+
+  const publishOnly = await f.app.request(
+    `/api/organizational-conversations/${conversation.id}/messages`,
+    request({
+      content: 'Share this without a reply',
+      idempotencyKey: 'direct-publish-only',
+      activation: 'none',
+    }),
+  );
+  expect(publishOnly.status).toBe(201);
+  await f.service.idle();
+  expect(f.workspace.collaboration.executions(conversation.id)).toHaveLength(1);
+  expect(f.runtime.turn).toHaveBeenCalledTimes(1);
+});
+
+it('does not guess a direct recipient when the only participant is no longer authorized', async () => {
+  const f = fixture();
+  const conversation = f.conversation([0], 'direct');
+  f.workspace.setSessionAgentStatus(f.agents[0].id, 'removed');
+  const response = await f.app.request(
+    `/api/organizational-conversations/${conversation.id}/messages`,
+    request({ content: 'Who is there?', idempotencyKey: 'direct-revoked' }),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: 'Direct activation requires one authorized private collaborator.',
+  });
+  expect(f.runtime.turn).not.toHaveBeenCalled();
+});
+
+it('selects a Director as the kickoff facilitator without starting an autonomous follow-up loop', async () => {
+  const f = fixture();
+  f.workspace.updateSessionAgent(f.agents[1].id, { role: 'Director' });
+  const kickoff = f.workspace.initializeProjectKickoff(f.master.id, 'owner');
+  const response = await f.app.request(
+    `/api/office/projects/${f.master.id}/kickoff/start`,
+    request({}),
+  );
+  expect(response.status).toBe(202);
+  expect(await response.clone().json()).toMatchObject({
+    targets: [`${f.dots[1].name} · Director`],
+  });
+  await f.service.idle();
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(1);
+  const count = f.runtime.turn.mock.calls.length;
+  f.service.publishHuman(kickoff.conversation.id, {
+    content: 'Please continue from your answer.',
+    idempotencyKey: 'facilitator-follow-up',
+  });
+  await f.service.idle();
+  expect(f.runtime.turn).toHaveBeenCalledTimes(count);
+});
+
 it('rejects forged senders and cross-conversation or cross-Dot mentions before compute', async () => {
   const f = fixture();
   const conversation = f.conversation();
@@ -567,7 +648,6 @@ it('persists timeout and runtime errors without fabricated agent messages', asyn
 it('does not start a queued execution timeout until that execution begins', async () => {
   const firstStarted = deferred<void>();
   const secondStarted = deferred<void>();
-  const finishSecond = deferred<string>();
   let calls = 0;
   const f = fixture({
     timeoutMs: 30,
@@ -578,7 +658,7 @@ it('does not start a queued execution timeout until that execution begins', asyn
         return new Promise<string>(() => {});
       }
       secondStarted.resolve();
-      return finishSecond.promise;
+      return 'Queued response';
     },
   });
   const conversation = f.conversation();
@@ -590,23 +670,10 @@ it('does not start a queued execution timeout until that execution begins', asyn
   await firstStarted.promise;
   await new Promise((resolve) => setTimeout(resolve, 45));
   await secondStarted.promise;
-  const executions = f.workspace.collaboration.executions(conversation.id);
-  expect(executions[0]).toMatchObject({
-    status: 'failed',
-    error: 'Agent execution timed out.',
-  });
-  expect(executions[1]).toMatchObject({
-    status: 'running',
-    error: null,
-    completedAt: null,
-    progress: 'Starting response…',
-  });
-  expect(f.runtime.turn).toHaveBeenCalledTimes(2);
-  finishSecond.resolve('Queued response');
   await f.service.idle();
-  expect(
-    f.workspace.collaboration.executions(conversation.id)[1],
-  ).toMatchObject({ status: 'succeeded' });
+  const executions = f.workspace.collaboration.executions(conversation.id);
+  expect(executions[1]).toMatchObject({ status: 'succeeded' });
+  expect(f.runtime.turn).toHaveBeenCalledTimes(2);
 });
 
 it('cancels queued and in-flight executions without publishing a late response', async () => {

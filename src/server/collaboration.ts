@@ -148,7 +148,10 @@ export class CollaborationService {
       this.workspace.ownerId,
     );
     const eligible = this.eligible(conversationId);
-    const activation = input.activation ?? 'none';
+    // Private one-to-one conversations request a response by default. An
+    // explicit `none` remains the user's publish-only choice.
+    const activation =
+      input.activation ?? (conversation.kind === 'direct' ? 'direct' : 'none');
     const mentions: CollaborationMention[] = (input.mentions ?? []).map(
       (mention) => {
         if (mention.conversationId !== conversationId)

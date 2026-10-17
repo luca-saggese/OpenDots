@@ -32,6 +32,7 @@ import { Mascot } from './Mascot';
 import {
   MentionComposer,
   CollaborationControls,
+  resolveTypedMentions,
 } from './CollaborationControls';
 
 type Person = { dot: Dot; profile: DotProfile };
@@ -105,6 +106,7 @@ export function ProjectConversations({
   const [sendKey, setSendKey] = useState<string>();
   const selectedId = selected?.conversation.id;
   const activeConversation = useRef<string | undefined>(undefined);
+  const handledRequestedConversation = useRef<string | undefined>(undefined);
   useEffect(() => {
     activeConversation.current = selectedId;
     setSnapshot(undefined);
@@ -339,21 +341,42 @@ export function ProjectConversations({
     }
   };
   useEffect(() => {
-    if (!kickoffConversationId || !rows.length) return;
+    if (
+      !kickoffConversationId ||
+      requestedConversationId ||
+      selectedId ||
+      !rows.length
+    )
+      return;
     const kickoff = rows.find(
       (row) => row.conversation.id === kickoffConversationId,
     );
-    if (kickoff && selectedId !== kickoffConversationId)
-      void openConversation(kickoff);
-  }, [rows, kickoffConversationId, selectedId, openConversation]);
+    if (kickoff) void openConversation(kickoff);
+  }, [
+    rows,
+    kickoffConversationId,
+    requestedConversationId,
+    selectedId,
+    openConversation,
+  ]);
   useEffect(() => {
-    if (!requestedConversationId || !rows.length) return;
+    if (!requestedConversationId) {
+      handledRequestedConversation.current = undefined;
+      return;
+    }
+    if (
+      handledRequestedConversation.current === requestedConversationId ||
+      !rows.length
+    )
+      return;
     const requested = rows.find(
       (row) => row.conversation.id === requestedConversationId,
     );
-    if (requested && selectedId !== requestedConversationId)
+    if (requested) {
+      handledRequestedConversation.current = requestedConversationId;
       void openConversation(requested);
-  }, [rows, requestedConversationId, selectedId, openConversation]);
+    }
+  }, [rows, requestedConversationId, openConversation]);
   const createConversation = async () => {
     setError('');
     setNotice('');
@@ -422,6 +445,27 @@ export function ProjectConversations({
   const sendMessage = async (event: FormEvent) => {
     event.preventDefault();
     if (!selected || !draft.trim() || sending) return;
+    const typedRecipients = resolveTypedMentions(
+      draft,
+      selected.conversation.id,
+      mentionCandidates,
+      mentions,
+    );
+    if (typedRecipients.ambiguous.length) {
+      setError(
+        `${typedRecipients.ambiguous.map((name) => `@${name}`).join(', ')} matches multiple collaborators. Choose the intended person from the @ suggestions.`,
+      );
+      return;
+    }
+    if (
+      selected.conversation.kind === 'direct' &&
+      typedRecipients.unresolved.length
+    ) {
+      setError(
+        `${typedRecipients.unresolved.map((name) => `@${name}`).join(', ')} does not identify the collaborator in this private conversation. Remove the mention or choose a valid participant.`,
+      );
+      return;
+    }
     setSending(true);
     setError('');
     setNotice('');
@@ -434,10 +478,10 @@ export function ProjectConversations({
         {
           content: draft.trim(),
           idempotencyKey: requestKey,
-          mentions,
+          mentions: typedRecipients.mentions,
           activation: publishOnly
             ? 'none'
-            : mentions.length
+            : typedRecipients.mentions.length
               ? 'mentioned'
               : selected.conversation.kind === 'direct'
                 ? 'direct'
@@ -451,8 +495,8 @@ export function ProjectConversations({
       setNotice(
         publishOnly
           ? 'Message published. No Dot was activated (publish-only selected).'
-          : activationNames
-            ? `Response requested from ${activationNames}. Follow execution status below.`
+          : outgoingActivationNames
+            ? `Response requested from ${outgoingActivationNames}. Follow execution status in the conversation.`
             : current?.kind === 'direct'
               ? 'Message published. The private collaborator was asked to respond.'
               : 'Message published to the conversation. No Dot was activated; select a recipient from the @ suggestions to request a response.',
@@ -586,22 +630,47 @@ export function ProjectConversations({
     )
     .join(', ');
   const selectableAgents = agents.filter((agent) => agent.status === 'active');
-  const selectedMentionNames = new Set(
-    mentions.flatMap((mention) =>
-      mention.type === 'all' ? ['tutti'] : [mention.displayName],
-    ),
-  );
-  const unresolvedMentionNames = [
-    ...draft.matchAll(/(?:^|\s)@([\p{L}\p{N}_-]+)/gu),
-  ]
-    .map((match) => match[1])
-    .filter(
-      (name) =>
-        ![...selectedMentionNames].some(
-          (selectedName) =>
-            selectedName.toLocaleLowerCase() === name.toLocaleLowerCase(),
-        ),
+  const mentionCandidates = participants.flatMap((participant) => {
+    const agent = agents.find(
+      (item) =>
+        item.id === participant.participantId && item.status === 'active',
     );
+    const dot =
+      agent && roster.find((item) => item.dot.id === agent.dotId)?.dot;
+    return agent && dot && participant.role !== 'observer'
+      ? [
+          {
+            sessionAgentId: agent.id,
+            dotId: agent.dotId,
+            name: dot.name,
+            role: agent.role,
+          },
+        ]
+      : [];
+  });
+  const resolvedDraftMentions = resolveTypedMentions(
+    draft,
+    current?.id ?? '',
+    mentionCandidates,
+    mentions,
+  );
+  const unresolvedMentionNames = resolvedDraftMentions.unresolved;
+  const ambiguousMentionNames = resolvedDraftMentions.ambiguous;
+  const outgoingActivationNames = resolvedDraftMentions.mentions.length
+    ? resolvedDraftMentions.mentions.some((mention) => mention.type === 'all')
+      ? mentionCandidates.map((candidate) => candidate.name).join(', ')
+      : resolvedDraftMentions.mentions
+          .filter((mention) => mention.type === 'agent')
+          .map((mention) => {
+            const candidate = mentionCandidates.find(
+              (item) => item.sessionAgentId === mention.sessionAgentId,
+            );
+            return candidate
+              ? `${candidate.name} (${candidate.role})`
+              : mention.displayName;
+          })
+          .join(', ')
+    : activationNames;
   const availableToAdd = selectableAgents.filter(
     (agent) =>
       !participants.some(
@@ -869,26 +938,7 @@ export function ProjectConversations({
                     setMentions(value);
                     setSendKey(undefined);
                   }}
-                  candidates={participants.flatMap((participant) => {
-                    const agent = agents.find(
-                      (item) =>
-                        item.id === participant.participantId &&
-                        item.status === 'active',
-                    );
-                    const dot =
-                      agent &&
-                      roster.find((item) => item.dot.id === agent.dotId)?.dot;
-                    return agent && dot && participant.role !== 'observer'
-                      ? [
-                          {
-                            sessionAgentId: agent.id,
-                            dotId: dot.id,
-                            name: dot.name,
-                            role: agent.role,
-                          },
-                        ]
-                      : [];
-                  })}
+                  candidates={mentionCandidates}
                 />
                 <div className="organizational-composer-side-actions">
                   <label className="publish-only">
@@ -917,17 +967,28 @@ export function ProjectConversations({
                       ? mentions.length
                         ? 'Publish-only is selected. Mentioned collaborators will not be activated.'
                         : 'No collaborator will be activated.'
-                      : activationNames
-                        ? `Requested: ${activationNames}.`
-                        : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
+                      : outgoingActivationNames
+                        ? `Requested: ${outgoingActivationNames}.`
+                        : current.kind === 'direct'
+                          ? 'The private collaborator will be asked to respond. Check “Publish without requesting responses” to share without activating them.'
+                          : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
                   </small>
+                  {!!ambiguousMentionNames.length && !publishOnly && (
+                    <small className="chat-error" role="status">
+                      {ambiguousMentionNames
+                        .map((name) => `@${name}`)
+                        .join(', ')}{' '}
+                      matches multiple collaborators. Choose from the @
+                      suggestions.
+                    </small>
+                  )}
                   {!!unresolvedMentionNames.length && !publishOnly && (
                     <small className="chat-error" role="status">
                       {unresolvedMentionNames
                         .map((name) => `@${name}`)
                         .join(', ')}{' '}
-                      is text only. Select each collaborator from the @
-                      suggestions to request a response.
+                      does not match an active participant, so it will not
+                      activate anyone.
                     </small>
                   )}
                 </div>

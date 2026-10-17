@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   CollaborationControls,
   MentionComposer,
+  resolveTypedMentions,
 } from '../src/client/CollaborationControls';
 import type { CollaborationSnapshot } from '../src/shared/types';
 
@@ -75,6 +76,46 @@ it('selects @tutti as a structured conversation-scoped mention', async () => {
   expect(onMentions).toHaveBeenCalledWith([
     { type: 'all', conversationId: 'conversation' },
   ]);
+});
+it('resolves typed @names and @tutti into structured activations', () => {
+  const candidates = [
+    {
+      sessionAgentId: 'nova-session',
+      dotId: 'nova-dot',
+      name: 'Nova',
+      role: 'Director',
+    },
+  ];
+  expect(
+    resolveTypedMentions('@nova, partiamo?', 'conversation', candidates, []),
+  ).toMatchObject({
+    mentions: [
+      {
+        type: 'agent',
+        conversationId: 'conversation',
+        sessionAgentId: 'nova-session',
+        dotId: 'nova-dot',
+      },
+    ],
+    unresolved: [],
+    ambiguous: [],
+  });
+  expect(
+    resolveTypedMentions('@tutti iniziamo', 'conversation', candidates, []),
+  ).toMatchObject({
+    mentions: [{ type: 'all', conversationId: 'conversation' }],
+    unresolved: [],
+    ambiguous: [],
+  });
+});
+it('requires a structured choice when a typed @name is ambiguous', () => {
+  const candidates = [
+    { sessionAgentId: 'a', dotId: 'dot-a', name: 'Nova', role: 'Writer' },
+    { sessionAgentId: 'b', dotId: 'dot-b', name: 'Nova', role: 'Editor' },
+  ];
+  expect(
+    resolveTypedMentions('@Nova', 'conversation', candidates, []),
+  ).toMatchObject({ mentions: [], ambiguous: ['Nova'], unresolved: [] });
 });
 it('submits on Enter and leaves Shift+Enter available for a newline', async () => {
   await act(async () => {

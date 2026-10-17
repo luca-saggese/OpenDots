@@ -898,7 +898,10 @@ export function Office({
               }}
               kickoffTargets={kickoffTargets}
               requestedConversationId={requestedConversationId}
-              onConversationChange={onConversationChange}
+              onConversationChange={(conversationId, title) => {
+                setRequestedConversationId(undefined);
+                onConversationChange(conversationId, title);
+              }}
               onNavigationRefresh={onNavigationRefresh}
               onOpenDirect={onOpenDirect}
             />

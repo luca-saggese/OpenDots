@@ -10,6 +10,64 @@ export type MentionCandidate = {
   name: string;
   role: string;
 };
+
+export function resolveTypedMentions(
+  value: string,
+  conversationId: string,
+  candidates: MentionCandidate[],
+  selected: CollaborationMention[],
+) {
+  const mentions = [...selected];
+  const selectedNames = new Set(
+    selected
+      .flatMap((mention) =>
+        mention.type === 'all' ? ['tutti'] : [mention.displayName],
+      )
+      .map((name) => name.toLocaleLowerCase()),
+  );
+  const typedNames = [
+    ...new Set(
+      [...value.matchAll(/(?:^|\s)@([\p{L}\p{N}_-]+)/gu)].map(
+        (match) => match[1],
+      ),
+    ),
+  ];
+  const unresolved: string[] = [];
+  const ambiguous: string[] = [];
+  for (const name of typedNames) {
+    if (selectedNames.has(name.toLocaleLowerCase())) continue;
+    if (name.toLocaleLowerCase() === 'tutti') {
+      if (!mentions.some((mention) => mention.type === 'all'))
+        mentions.push({ type: 'all', conversationId });
+      continue;
+    }
+    if (mentions.some((mention) => mention.type === 'all')) continue;
+    const matches = candidates.filter(
+      (candidate) =>
+        candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase(),
+    );
+    if (matches.length === 1) {
+      const candidate = matches[0];
+      if (
+        !mentions.some(
+          (mention) =>
+            mention.type === 'agent' &&
+            mention.sessionAgentId === candidate.sessionAgentId,
+        )
+      )
+        mentions.push({
+          type: 'agent',
+          conversationId,
+          sessionAgentId: candidate.sessionAgentId,
+          dotId: candidate.dotId,
+          displayName: candidate.name,
+        });
+    } else if (matches.length > 1) ambiguous.push(name);
+    else unresolved.push(name);
+  }
+  return { mentions, unresolved, ambiguous };
+}
+
 export function MentionComposer({
   conversationId,
   candidates,
