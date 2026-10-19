@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import {
   FileText,
   Plus,
@@ -25,11 +25,13 @@ export function pageExcerpt(content: string) {
 export function SpaceLibrary({
   space,
   pages,
+  spaceActions,
   onPage,
   onNew,
 }: {
   space: Space;
   pages: Page[];
+  spaceActions?: ReactNode;
   onPage: (id: string) => void;
   onNew: () => void;
 }) {
@@ -66,6 +68,9 @@ export function SpaceLibrary({
           <Plus size={17} /> New page
         </button>
       </header>
+      {spaceActions && (
+        <div className="space-library-space-tools">{spaceActions}</div>
+      )}
       <div className="library-tools">
         <label className="library-search">
           <Search size={17} />

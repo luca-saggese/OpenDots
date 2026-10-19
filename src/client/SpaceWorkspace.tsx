@@ -116,15 +116,19 @@ export function SpaceWorkspace({
         </div>
       )}
       {!pageId ? (
-        <>
-          <SpaceLibrary
-            space={space}
-            pages={pages}
-            onPage={onPage}
-            onNew={() => void create(null)}
-          />
-          <SpaceTrash spaceId={space.id} onChanged={() => void refresh()} />
-        </>
+        <SpaceLibrary
+          space={space}
+          pages={pages}
+          spaceActions={
+            <SpaceTrash
+              spaceId={space.id}
+              spaceName={space.name}
+              onChanged={() => void refresh()}
+            />
+          }
+          onPage={onPage}
+          onNew={() => void create(null)}
+        />
       ) : page ? (
         <div className="space-writing-layout">
           {outline && (

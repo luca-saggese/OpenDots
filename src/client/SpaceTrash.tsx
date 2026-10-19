@@ -5,9 +5,11 @@ import { api } from './api';
 
 export function SpaceTrash({
   spaceId,
+  spaceName,
   onChanged,
 }: {
   spaceId: string;
+  spaceName: string;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -123,26 +125,37 @@ export function SpaceTrash({
   };
 
   return (
-    <section className="space-trash" aria-label="Trash and backup">
+    <section
+      className="space-trash"
+      aria-label={`${spaceName} Space tools`}
+    >
       <div className="space-trash-row">
-        <button
-          className="space-trash-toggle"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <ArchiveRestore size={15} />
-          <span>Trash{trash?.length ? ` (${trash.length})` : ''}</span>
-        </button>
+        <div className="space-trash-context">
+          <ArchiveRestore size={17} aria-hidden="true" />
+          <span>
+            <strong>Space tools</strong>
+            <small>Trash and backups for {spaceName}</small>
+          </span>
+        </div>
         <div className="space-trash-actions">
           <button
+            className="space-trash-toggle"
+            aria-expanded={open}
+            aria-label={`${open ? 'Hide' : 'Open'} Trash for ${spaceName}`}
+            onClick={() => setOpen(!open)}
+          >
+            <ArchiveRestore size={15} />
+            <span>Trash{trash?.length ? ` (${trash.length})` : ''}</span>
+          </button>
+          <button
             onClick={() => void exportSpace()}
-            title="Download this Space as JSON"
+            title={`Download ${spaceName} as JSON`}
           >
             <Download size={15} /> Export
           </button>
           <button
             onClick={() => fileRef.current?.click()}
-            title="Import a Space JSON export"
+            title={`Import pages into ${spaceName}`}
           >
             <Upload size={15} /> Import
           </button>
@@ -161,7 +174,7 @@ export function SpaceTrash({
         </div>
       </div>
       {open && (
-        <div className="space-trash-panel">
+        <div className="space-trash-panel" aria-label={`${spaceName} Trash`}>
           {!trash && <p className="page-history-empty">Loading trash…</p>}
           {trash?.length === 0 && (
             <p className="page-history-empty">
