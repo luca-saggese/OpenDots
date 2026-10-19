@@ -1,7 +1,7 @@
 import { defineTool } from '@copilotkit/runtime/v2';
 import { z } from 'zod';
 import type { WorkspaceStore } from './workspace.js';
-import { pageInput, pagePatch } from './pages.js';
+import { pageInput, pagePatch, pageSectionAppend } from './pages.js';
 export function pageAccess(
   workspace: WorkspaceStore,
   spaceId: string,
@@ -41,6 +41,11 @@ export function pageAccess(
       linked(workspace.pages.create(resolve(requested), input)),
     edit: (id: string, input: z.input<typeof pagePatch>, requested?: string) =>
       linked(workspace.pages.update(resolve(requested), id, input)),
+    appendSection: (
+      id: string,
+      input: z.input<typeof pageSectionAppend>,
+      requested?: string,
+    ) => linked(workspace.pages.appendSection(resolve(requested), id, input)),
   };
 }
 
@@ -88,6 +93,14 @@ export function pageTools(access: ReturnType<typeof pageAccess>) {
       parameters: pagePatch.extend({ id: z.string(), ...scope }),
       execute: async ({ id, spaceId, ...patch }) =>
         access.edit(id, patch, spaceId),
+    }),
+    defineTool({
+      name: 'append_space_page_section',
+      description:
+        'Append one complete section to an existing page. Use a stable sectionKey so retries are idempotent. Read the latest revision before appending. Do not rewrite the whole page to add missing sections.',
+      parameters: pageSectionAppend.extend({ id: z.string(), ...scope }),
+      execute: async ({ id, spaceId, ...section }) =>
+        access.appendSection(id, section, spaceId),
     }),
   ];
 }

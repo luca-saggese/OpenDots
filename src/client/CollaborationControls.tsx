@@ -171,12 +171,14 @@ export function CollaborationControls({
   onAction,
   onSettings,
   triggerMessageId,
+  meetingAvailable = false,
 }: {
   snapshot?: CollaborationSnapshot;
   name: (agentId: string) => string;
   onAction: (path: string, body: unknown) => Promise<void>;
   onSettings: (settings: CollaborationSnapshot['settings']) => Promise<void>;
   triggerMessageId?: string;
+  meetingAvailable?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const act = async (task: () => Promise<void>) => {
@@ -207,13 +209,17 @@ export function CollaborationControls({
               void act(() =>
                 onSettings({
                   ...snapshot.settings,
-                  mode: event.target.value as 'manual' | 'hand_raise',
+                  mode: event.target
+                    .value as CollaborationSnapshot['settings']['mode'],
                 }),
               )
             }
           >
             <option value="manual">Manual</option>
             <option value="hand_raise">With hand raises</option>
+            {meetingAvailable && (
+              <option value="meeting">Meeting · participants listen</option>
+            )}
           </select>
         </label>
         <label>
@@ -235,25 +241,27 @@ export function CollaborationControls({
             }
           />
         </label>
-        <label>
-          Evaluation budget{' '}
-          <input
-            aria-label="Hand raise evaluation budget"
-            type="number"
-            min={1}
-            max={4}
-            value={snapshot.settings.evaluationBudget}
-            disabled={busy}
-            onChange={(event) =>
-              void act(() =>
-                onSettings({
-                  ...snapshot.settings,
-                  evaluationBudget: Number(event.target.value),
-                }),
-              )
-            }
-          />
-        </label>
+        {snapshot.settings.mode === 'hand_raise' && (
+          <label>
+            Evaluation budget{' '}
+            <input
+              aria-label="Hand raise evaluation budget"
+              type="number"
+              min={1}
+              max={4}
+              value={snapshot.settings.evaluationBudget}
+              disabled={busy}
+              onChange={(event) =>
+                void act(() =>
+                  onSettings({
+                    ...snapshot.settings,
+                    evaluationBudget: Number(event.target.value),
+                  }),
+                )
+              }
+            />
+          </label>
+        )}
       </div>
       {snapshot.settings.mode === 'hand_raise' && (
         <button

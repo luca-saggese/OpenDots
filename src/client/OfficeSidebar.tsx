@@ -55,6 +55,7 @@ export function OfficeSidebar({
   nativeChatEnabled,
   onOpenProject,
   onOpenConversation,
+  onOpenAllConversations,
   onOpenDotProfile,
   onOpenDirect,
   onOpenSpace,
@@ -79,6 +80,7 @@ export function OfficeSidebar({
     tab?: 'overview' | 'team' | 'conversations',
   ) => void;
   onOpenConversation: (projectId: string, conversationId?: string) => void;
+  onOpenAllConversations: (projectId: string) => void;
   onOpenDotProfile: (dotId: string) => void;
   onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
   onOpenSpace: (spaceId: string) => void;
@@ -206,7 +208,7 @@ export function OfficeSidebar({
                   onOpenConversation(item.project.id, conversationId)
                 }
                 onOpenAllConversations={() =>
-                  onOpenConversation(item.project.id)
+                  onOpenAllConversations(item.project.id)
                 }
                 onShowAll={() =>
                   setShowAllByProject((current) =>

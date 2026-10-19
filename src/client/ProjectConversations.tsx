@@ -61,6 +61,7 @@ export function ProjectConversations({
   kickoffTargets,
   onStartKickoff,
   requestedConversationId,
+  showConversationList = false,
   onConversationChange,
   onNavigationRefresh,
   onOpenDirect,
@@ -74,6 +75,7 @@ export function ProjectConversations({
   kickoffTargets: string[];
   onStartKickoff: () => Promise<string[]>;
   requestedConversationId?: string;
+  showConversationList?: boolean;
   onConversationChange: (conversationId?: string, title?: string) => void;
   onNavigationRefresh: () => void;
   onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
@@ -104,6 +106,8 @@ export function ProjectConversations({
   const [kickoffAgendaExpanded, setKickoffAgendaExpanded] = useState(false);
   const [snapshot, setSnapshot] = useState<CollaborationSnapshot>();
   const [sendKey, setSendKey] = useState<string>();
+  const [returnedToConversationList, setReturnedToConversationList] =
+    useState(showConversationList);
   const selectedId = selected?.conversation.id;
   const activeConversation = useRef<string | undefined>(undefined);
   const handledRequestedConversation = useRef<string | undefined>(undefined);
@@ -343,6 +347,8 @@ export function ProjectConversations({
   useEffect(() => {
     if (
       !kickoffConversationId ||
+      showConversationList ||
+      returnedToConversationList ||
       requestedConversationId ||
       selectedId ||
       !rows.length
@@ -355,12 +361,14 @@ export function ProjectConversations({
   }, [
     rows,
     kickoffConversationId,
+    showConversationList,
+    returnedToConversationList,
     requestedConversationId,
     selectedId,
     openConversation,
   ]);
   useEffect(() => {
-    if (!requestedConversationId) {
+    if (showConversationList || !requestedConversationId) {
       handledRequestedConversation.current = undefined;
       return;
     }
@@ -376,7 +384,12 @@ export function ProjectConversations({
       handledRequestedConversation.current = requestedConversationId;
       void openConversation(requested);
     }
-  }, [rows, requestedConversationId, openConversation]);
+  }, [
+    rows,
+    requestedConversationId,
+    showConversationList,
+    openConversation,
+  ]);
   const createConversation = async () => {
     setError('');
     setNotice('');
@@ -485,7 +498,10 @@ export function ProjectConversations({
               ? 'mentioned'
               : selected.conversation.kind === 'direct'
                 ? 'direct'
-                : 'none',
+                : selected.conversation.kind === 'plenary' &&
+                    snapshot?.settings.mode === 'meeting'
+                  ? 'meeting'
+                  : 'none',
         },
       );
       if (activeConversation.current !== selected.conversation.id) return;
@@ -499,7 +515,10 @@ export function ProjectConversations({
             ? `Response requested from ${outgoingActivationNames}. Follow execution status in the conversation.`
             : current?.kind === 'direct'
               ? 'Message published. The private collaborator was asked to respond.'
-              : 'Message published to the conversation. No Dot was activated; select a recipient from the @ suggestions to request a response.',
+              : current?.kind === 'plenary' &&
+                  snapshot?.settings.mode === 'meeting'
+                ? 'Message shared with the meeting. Active collaborators are listening and may respond when relevant.'
+                : 'Message published to the conversation. No Dot was activated; select a recipient from the @ suggestions to request a response.',
       );
       const page = await api<OrganizationalMessage[]>(
         `/organizational-conversations/${selected.conversation.id}/messages?limit=${PAGE_SIZE}`,
@@ -593,6 +612,7 @@ export function ProjectConversations({
   const collaborationControls = current && (
     <CollaborationControls
       snapshot={snapshot}
+      meetingAvailable={current.kind === 'plenary'}
       name={(agentId) => {
         const agent = agents.find((item) => item.id === agentId);
         return (
@@ -682,6 +702,38 @@ export function ProjectConversations({
   const activeExecutions = (snapshot?.executions ?? []).filter((execution) =>
     ['queued', 'running'].includes(execution.status),
   );
+  const failedMeetingAssignments = [
+    ...new Map(
+      (snapshot?.executions ?? [])
+        .filter(
+          (execution) =>
+            execution.kind === 'response' &&
+            execution.requestId.startsWith('meeting-assignment:'),
+        )
+        .map((execution) => [
+          `${execution.triggerMessageId}:${execution.sessionAgentId}`,
+          execution,
+        ]),
+    ).values(),
+  ]
+    .filter((execution) => ['failed', 'interrupted'].includes(execution.status))
+    .slice(-8);
+  const terminalExecutionNotes = (snapshot?.executions ?? [])
+    .filter(
+      (execution) =>
+        execution.kind === 'response' &&
+        !execution.requestId.startsWith('meeting-assignment:') &&
+        ['succeeded', 'failed', 'cancelled', 'interrupted'].includes(
+          execution.status,
+        ) &&
+        !!execution.partialOutput?.trim() &&
+        !messages.some(
+          (message) =>
+            message.sourceThreadId === execution.threadId &&
+            message.content.trim() === execution.partialOutput?.trim(),
+        ),
+    )
+    .slice(-6);
 
   if (selected && current)
     return (
@@ -692,6 +744,7 @@ export function ProjectConversations({
             aria-label="Back to all conversations"
             title="All conversations"
             onClick={() => {
+              setReturnedToConversationList(true);
               setSelected(undefined);
               activeConversation.current = undefined;
               onConversationChange(undefined, undefined);
@@ -886,7 +939,9 @@ export function ProjectConversations({
                         {name}{' '}
                         {execution.status === 'queued'
                           ? 'è in coda'
-                          : 'sta lavorando'}
+                          : execution.kind === 'evaluation'
+                            ? 'sta ascoltando'
+                            : 'sta lavorando'}
                       </b>
                       {execution.status === 'queued' ? (
                         <Clock3 size={14} aria-hidden="true" />
@@ -904,10 +959,85 @@ export function ProjectConversations({
                         : (execution.progress ??
                           'Sta preparando una risposta…')}
                     </p>
-                    {execution.status === 'running' &&
+                    {execution.kind === 'response' &&
+                      execution.status === 'running' &&
                       execution.partialOutput && (
                         <p>{execution.partialOutput}</p>
                       )}
+                  </article>
+                );
+              })}
+              {terminalExecutionNotes.map((execution) => {
+                const agent = agents.find(
+                  (item) => item.id === execution.sessionAgentId,
+                );
+                const name =
+                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
+                    .name ??
+                  agent?.displayName ??
+                  'Collaborator';
+                const executionLabel =
+                  execution.status === 'succeeded'
+                    ? 'turno completato'
+                    : execution.status === 'failed'
+                      ? 'turno interrotto con errore'
+                      : execution.status === 'cancelled'
+                        ? 'turno annullato'
+                        : 'turno interrotto';
+                return (
+                  <article
+                    className="organizational-message agent-working"
+                    key={`execution-notes-${execution.id}`}
+                  >
+                    <div>
+                      <b>
+                        {name} · note di lavoro ({executionLabel})
+                      </b>
+                    </div>
+                    <p>{execution.partialOutput}</p>
+                    {execution.error && <small>{execution.error}</small>}
+                  </article>
+                );
+              })}
+              {failedMeetingAssignments.map((execution) => {
+                const agent = agents.find(
+                  (item) => item.id === execution.sessionAgentId,
+                );
+                const name =
+                  roster.find((item) => item.dot.id === agent?.dotId)?.dot
+                    .name ??
+                  agent?.displayName ??
+                  'Collaborator';
+                return (
+                  <article
+                    className="organizational-message agent-working"
+                    key={`failed-${execution.id}`}
+                    role="alert"
+                  >
+                    <div>
+                      <b>{name} · intervento non completato</b>
+                    </div>
+                    {execution.partialOutput && (
+                      <p>{execution.partialOutput}</p>
+                    )}
+                    <p>{execution.error ?? 'L’esecuzione si è interrotta.'}</p>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Riprovare l’incarico di ${name}? Controlla prima eventuali effetti già prodotti dal tentativo precedente.`,
+                          )
+                        )
+                          void participationAction(
+                            `/executions/${execution.id}/retry`,
+                            {},
+                          );
+                      }}
+                    >
+                      Riprova intervento
+                    </button>
                   </article>
                 );
               })}
@@ -971,7 +1101,10 @@ export function ProjectConversations({
                         ? `Requested: ${outgoingActivationNames}.`
                         : current.kind === 'direct'
                           ? 'The private collaborator will be asked to respond. Check “Publish without requesting responses” to share without activating them.'
-                          : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
+                          : current.kind === 'plenary' &&
+                              snapshot?.settings.mode === 'meeting'
+                            ? 'All active meeting participants will listen. Those with a relevant contribution may respond.'
+                            : 'Select recipients from @ suggestions to request a response. Otherwise this message is shared without activation.'}
                   </small>
                   {!!ambiguousMentionNames.length && !publishOnly && (
                     <small className="chat-error" role="status">
@@ -1096,6 +1229,12 @@ export function ProjectConversations({
                           </span>
                         )}
                       </span>
+                      {execution?.kind === 'response' &&
+                        execution.partialOutput && (
+                          <small className="conversation-participant-stream">
+                            {execution.partialOutput.slice(-220)}
+                          </small>
+                        )}
                     </span>
                   </div>
                   {agent && (

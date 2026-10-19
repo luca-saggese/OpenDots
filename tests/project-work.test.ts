@@ -291,7 +291,13 @@ it('continues planning in the kickoff history and reuses the same planning activ
       ),
   ).toHaveLength(1);
 
-  platform.projectWork.approvePlan(snapshot.plans[0]!.id);
+  f.workspace.projectWork.approvePlan(snapshot.plans[0]!.id);
+  const claimed = f.workspace.projectWork.claimReady(f.master.id)!;
+  expect(claimed).toMatchObject({
+    status: 'running',
+    executionId: null,
+    currentMode: null,
+  });
   for (let attempt = 0; attempt < 20; attempt += 1) {
     await platform.collaboration.idle();
     await new Promise((resolve) => setTimeout(resolve, 5));

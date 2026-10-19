@@ -27,6 +27,7 @@ export class CollaborationStore {
         triggerMessageId TEXT NOT NULL REFERENCES conversation_messages(id),
         kind TEXT NOT NULL, status TEXT NOT NULL, authorization TEXT NOT NULL,
         output TEXT, error TEXT, progress TEXT, partialOutput TEXT, createdAt INTEGER NOT NULL, completedAt INTEGER, handRaiseId TEXT,
+        meetingRootId TEXT, meetingDepth INTEGER NOT NULL DEFAULT 0,
         UNIQUE(requestId, sessionAgentId, kind)
       );
       CREATE INDEX IF NOT EXISTS collaboration_execution_conversation_idx ON collaboration_executions(conversationId, createdAt);
@@ -41,6 +42,8 @@ export class CollaborationStore {
     for (const [column, definition] of [
       ['progress', 'TEXT'],
       ['partialOutput', 'TEXT'],
+      ['meetingRootId', 'TEXT'],
+      ['meetingDepth', 'INTEGER NOT NULL DEFAULT 0'],
     ] as const) {
       try {
         db.exec(
@@ -52,6 +55,41 @@ export class CollaborationStore {
           !error.message.includes('duplicate column name')
         )
           throw error;
+      }
+    }
+    db.exec(
+      'CREATE TABLE IF NOT EXISTS collaboration_migrations(name TEXT PRIMARY KEY)',
+    );
+    if (
+      !db
+        .prepare('SELECT 1 FROM collaboration_migrations WHERE name=?')
+        .get('plenary_meeting_v1')
+    ) {
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const rows = db
+          .prepare(
+            `SELECT s.conversationId,s.value FROM collaboration_settings s
+          JOIN session_conversations c ON c.id=s.conversationId WHERE c.kind='plenary'`,
+          )
+          .all() as Array<{ conversationId: string; value: string }>;
+        for (const row of rows) {
+          const value = JSON.parse(row.value) as CollaborationSettings;
+          if (value.mode === 'manual')
+            db.prepare(
+              'UPDATE collaboration_settings SET value=? WHERE conversationId=?',
+            ).run(
+              JSON.stringify({ ...value, mode: 'meeting' }),
+              row.conversationId,
+            );
+        }
+        db.prepare('INSERT INTO collaboration_migrations(name) VALUES (?)').run(
+          'plenary_meeting_v1',
+        );
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
       }
     }
   }
@@ -79,9 +117,15 @@ export class CollaborationStore {
         'SELECT value FROM collaboration_settings WHERE conversationId=?',
       )
       .get(id);
-    return row
-      ? JSON.parse(String(row.value))
-      : { mode: 'manual', maxActivations: 8, evaluationBudget: 2 };
+    if (row) return JSON.parse(String(row.value)) as CollaborationSettings;
+    const conversation = this.db
+      .prepare('SELECT kind FROM session_conversations WHERE id=?')
+      .get(id) as { kind: string } | undefined;
+    return {
+      mode: conversation?.kind === 'plenary' ? 'meeting' : 'manual',
+      maxActivations: 8,
+      evaluationBudget: 2,
+    };
   }
   saveSettings(id: string, value: CollaborationSettings) {
     this.db
@@ -152,7 +196,11 @@ export class CollaborationStore {
       | 'triggerMessageId'
       | 'kind'
       | 'authorization'
-    > & { handRaiseId?: string },
+    > & {
+      handRaiseId?: string;
+      meetingRootId?: string | null;
+      meetingDepth?: number;
+    },
   ) {
     const previous = this.db
       .prepare(
@@ -174,6 +222,8 @@ export class CollaborationStore {
       createdAt: Date.now(),
       completedAt: null,
       handRaiseId: input.handRaiseId ?? null,
+      meetingRootId: input.meetingRootId ?? null,
+      meetingDepth: input.meetingDepth ?? 0,
     };
     const columns = Object.keys(execution);
     this.db

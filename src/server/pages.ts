@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import {
@@ -17,6 +17,13 @@ export const pagePatch = z
     title: z.string().trim().min(1).max(160).optional(),
     content: z.string().max(100000).optional(),
     parentId: z.string().min(1).nullable().optional(),
+    expectedRevision: z.number().int().positive(),
+  })
+  .strict();
+export const pageSectionAppend = z
+  .object({
+    sectionKey: z.string().trim().min(1).max(120),
+    content: z.string().trim().min(1).max(12000),
     expectedRevision: z.number().int().positive(),
   })
   .strict();
@@ -99,6 +106,7 @@ export class Pages {
     db.exec(`CREATE TABLE IF NOT EXISTS pages(id TEXT PRIMARY KEY, spaceId TEXT NOT NULL, parentId TEXT, title TEXT NOT NULL, content TEXT NOT NULL, revision INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL, sourceThreadId TEXT);
  CREATE TABLE IF NOT EXISTS page_threads(pageId TEXT NOT NULL,dotId TEXT NOT NULL,threadId TEXT NOT NULL UNIQUE,ready INTEGER NOT NULL DEFAULT 0, leaseUntil INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(pageId,dotId));
  CREATE TABLE IF NOT EXISTS page_versions(id TEXT PRIMARY KEY, pageId TEXT NOT NULL, spaceId TEXT NOT NULL, revision INTEGER NOT NULL, title TEXT NOT NULL, content TEXT NOT NULL, createdAt INTEGER NOT NULL, reason TEXT NOT NULL);
+ CREATE TABLE IF NOT EXISTS page_section_appends(pageId TEXT NOT NULL, sectionKey TEXT NOT NULL, contentHash TEXT NOT NULL, revision INTEGER NOT NULL, createdAt INTEGER NOT NULL, PRIMARY KEY(pageId,sectionKey));
  CREATE INDEX IF NOT EXISTS idx_page_versions_page ON page_versions(pageId, createdAt DESC);`);
     if (
       !db
@@ -307,6 +315,64 @@ export class Pages {
       throw error;
     }
   }
+  appendSection(
+    spaceId: string,
+    id: string,
+    input: z.input<typeof pageSectionAppend>,
+  ): Page {
+    const parsed = pageSectionAppend.safeParse(input);
+    if (!parsed.success)
+      throw new PageError(
+        'A section key, section content up to 12,000 characters, and expectedRevision are required.',
+      );
+    const { sectionKey, content, expectedRevision } = parsed.data;
+    const contentHash = createHash('sha256').update(content).digest('hex');
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const previous = this.db
+        .prepare(
+          'SELECT contentHash FROM page_section_appends WHERE pageId=? AND sectionKey=?',
+        )
+        .get(id, sectionKey) as { contentHash: string } | undefined;
+      const page = this.get(spaceId, id);
+      if (previous) {
+        if (previous.contentHash !== contentHash)
+          throw new PageError(
+            'This section key was already used with different content. Read the current page before editing.',
+            409,
+          );
+        this.db.exec('COMMIT');
+        return page;
+      }
+      if (page.revision !== expectedRevision)
+        throw new PageError(
+          'This page changed. Read the latest revision before appending another section.',
+          409,
+        );
+      const nextContent = `${page.content.trimEnd()}${page.content.trim() ? '\n\n' : ''}${content}`;
+      if (nextContent.length > 100000)
+        throw new PageError('Page content cannot exceed 100,000 characters.');
+      this.snapshot(page, 'append section');
+      const now = Date.now();
+      this.db
+        .prepare(
+          'UPDATE pages SET content=?,revision=revision+1,updatedAt=? WHERE id=? AND spaceId=? AND revision=?',
+        )
+        .run(nextContent, now, id, spaceId, expectedRevision);
+      const updated = this.get(spaceId, id);
+      this.db
+        .prepare(
+          'INSERT INTO page_section_appends(pageId,sectionKey,contentHash,revision,createdAt) VALUES (?,?,?,?,?)',
+        )
+        .run(id, sectionKey, contentHash, updated.revision, now);
+      this.pruneVersions(id);
+      this.db.exec('COMMIT');
+      return updated;
+    } catch (error) {
+      this.db.exec('ROLLBACK');
+      throw error;
+    }
+  }
   private snapshot(page: Page, reason: string) {
     this.db
       .prepare(
@@ -458,6 +524,9 @@ export class Pages {
       }
       this.db.prepare('DELETE FROM page_threads WHERE pageId=?').run(id);
       this.db.prepare('DELETE FROM page_versions WHERE pageId=?').run(id);
+      this.db
+        .prepare('DELETE FROM page_section_appends WHERE pageId=?')
+        .run(id);
       this.db
         .prepare('DELETE FROM pages WHERE id=? AND spaceId=?')
         .run(id, spaceId);

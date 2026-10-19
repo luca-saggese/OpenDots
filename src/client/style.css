@@ -5863,6 +5863,18 @@ h3 {
   gap: 6px;
   min-width: 0;
 }
+.conversation-participant-details .conversation-participant-stream {
+  display: block;
+  max-width: 240px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 9px 9px 9px 2px;
+  background: var(--surface-raised, var(--background));
+  color: var(--ink);
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
 .conversation-participant-details b,
 .conversation-participant-details small {
   overflow: hidden;

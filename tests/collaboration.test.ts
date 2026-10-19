@@ -11,7 +11,10 @@ import { Store } from '../src/server/store.js';
 import { Platform } from '../src/server/platform.js';
 import { Runner } from '../src/server/runner.js';
 import { createApp } from '../src/server/app.js';
-import { CollaborationService } from '../src/server/collaboration.js';
+import {
+  CollaborationService,
+  meetingAssignmentRecipients,
+} from '../src/server/collaboration.js';
 import {
   assembleCollaborationContext,
   collaborationAuthorization,
@@ -19,7 +22,7 @@ import {
 import { validateRuntimeScope } from '../src/server/runtime-scope.js';
 import { DotAgent } from '../src/server/dot-agent.js';
 import { completion } from './fixtures/model-stream.js';
-import { EventType } from '@ag-ui/core';
+import { EventType, type BaseEvent } from '@ag-ui/core';
 import { lastValueFrom, toArray } from 'rxjs';
 
 const cleanup: (() => Promise<void>)[] = [];
@@ -44,6 +47,7 @@ function fixture(
     turn?: (
       execution: CollaborationExecution,
       signal: AbortSignal,
+      onEvent: (event: BaseEvent) => void,
     ) => Promise<string>;
     timeoutMs?: number;
     path?: string;
@@ -56,10 +60,14 @@ function fixture(
     ready: vi.fn(),
     createThread: vi.fn(async () => {}),
     turn: vi.fn(
-      async (execution: CollaborationExecution, signal: AbortSignal) => {
+      async (
+        execution: CollaborationExecution,
+        signal: AbortSignal,
+        onEvent: (event: BaseEvent) => void = () => {},
+      ) => {
         contexts.push(assembleCollaborationContext(workspace, execution));
         return options.turn
-          ? options.turn(execution, signal)
+          ? options.turn(execution, signal, onEvent)
           : execution.kind === 'evaluation'
             ? JSON.stringify({
                 raise: true,
@@ -162,6 +170,43 @@ function fixture(
     mention,
   };
 }
+
+it('retains streamed response text when tool activity updates progress and the turn then fails', async () => {
+  const f = fixture({
+    turn: async (_execution, _signal, onEvent) => {
+      onEvent({
+        type: EventType.TEXT_MESSAGE_CONTENT,
+        delta: 'Sto verificando il brief prima di rispondere.',
+      } as BaseEvent);
+      onEvent({
+        type: EventType.TOOL_CALL_START,
+        toolCallId: 'search',
+        toolCallName: 'search_web',
+      } as BaseEvent);
+      onEvent({
+        type: EventType.TOOL_CALL_RESULT,
+        toolCallId: 'search',
+        content: 'Search failed.',
+      } as BaseEvent);
+      throw new Error('Search failed.');
+    },
+  });
+  const conversation = f.conversation([0], 'direct');
+  f.service.publishHuman(conversation.id, {
+    content: 'Controlla questa informazione.',
+    activation: 'direct',
+  });
+  await f.service.idle();
+  const [execution] = f.workspace.collaboration.executions(conversation.id);
+  expect(execution.status).toBe('failed');
+  expect(execution.partialOutput).toBe(
+    'Sto verificando il brief prima di rispondere.',
+  );
+  expect(execution.progress).toBe('Tool returned; continuing…');
+  expect(f.service.state(conversation.id).executions[0].partialOutput).toBe(
+    'Sto verificando il brief prima di rispondere.',
+  );
+});
 
 it('starts a persistent kickoff only on request, respects the activation cap, and retries idempotently without a Director', async () => {
   const f = fixture();
@@ -370,7 +415,7 @@ it('activates the real private collaborator and never copies other private conve
   );
 });
 
-it('runs multiple selected collaborators in deterministic order without concurrent turns', async () => {
+it('runs multiple selected collaborators concurrently in deterministic order', async () => {
   let running = 0;
   let maximum = 0;
   const f = fixture({
@@ -392,7 +437,7 @@ it('runs multiple selected collaborators in deterministic order without concurre
   expect(
     f.runtime.turn.mock.calls.map(([execution]) => execution.sessionAgentId),
   ).toEqual([f.agents[0].id, f.agents[1].id].sort());
-  expect(maximum).toBe(1);
+  expect(maximum).toBe(2);
   const release = f.workspace.acquireThreadRun('same-thread');
   expect(() => f.workspace.acquireThreadRun('same-thread')).toThrow(
     /already running/,
@@ -505,7 +550,7 @@ it('does not guess a direct recipient when the only participant is no longer aut
   expect(f.runtime.turn).not.toHaveBeenCalled();
 });
 
-it('selects a Director as the kickoff facilitator without starting an autonomous follow-up loop', async () => {
+it('selects a Director for kickoff and lets the whole meeting hear a later owner request', async () => {
   const f = fixture();
   f.workspace.updateSessionAgent(f.agents[1].id, { role: 'Director' });
   const kickoff = f.workspace.initializeProjectKickoff(f.master.id, 'owner');
@@ -527,7 +572,10 @@ it('selects a Director as the kickoff facilitator without starting an autonomous
     idempotencyKey: 'facilitator-follow-up',
   });
   await f.service.idle();
-  expect(f.runtime.turn).toHaveBeenCalledTimes(count);
+  expect(f.runtime.turn).toHaveBeenCalledTimes(count + 6);
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(7);
 });
 
 it('rejects forged senders and cross-conversation or cross-Dot mentions before compute', async () => {
@@ -661,18 +709,23 @@ it('does not start a queued execution timeout until that execution begins', asyn
       return 'Queued response';
     },
   });
-  const conversation = f.conversation();
+  const conversation = f.conversation([0], 'direct');
   f.service.publishHuman(conversation.id, {
-    content: 'Respond in turn',
-    activation: 'mentioned',
-    mentions: [{ type: 'all', conversationId: conversation.id }],
+    content: 'First turn',
+    activation: 'direct',
+  });
+  const second = f.service.publishHuman(conversation.id, {
+    content: 'Second turn',
+    activation: 'direct',
   });
   await firstStarted.promise;
   await new Promise((resolve) => setTimeout(resolve, 45));
   await secondStarted.promise;
   await f.service.idle();
   const executions = f.workspace.collaboration.executions(conversation.id);
-  expect(executions[1]).toMatchObject({ status: 'succeeded' });
+  expect(
+    executions.find((item) => item.triggerMessageId === second.id),
+  ).toMatchObject({ status: 'succeeded' });
   expect(f.runtime.turn).toHaveBeenCalledTimes(2);
 });
 
@@ -1253,4 +1306,165 @@ it('does not evaluate a pre-join message through a new agent participation inter
       .executions(conversation.id)
       .find((execution) => execution.sessionAgentId === f.agents[2].id)?.status,
   ).toBe('failed');
+});
+
+it('lets every active plenary participant listen to an unaddressed owner message, while publish-only remains silent', async () => {
+  const releaseEvaluations = deferred<void>();
+  let activeEvaluations = 0;
+  let peakEvaluations = 0;
+  const f = fixture({
+    turn: async (execution) => {
+      if (execution.kind !== 'evaluation')
+        return `Actual runtime contribution from ${f.workspace.dot(execution.dotId)!.name}.`;
+      activeEvaluations += 1;
+      peakEvaluations = Math.max(peakEvaluations, activeEvaluations);
+      try {
+        await releaseEvaluations.promise;
+        return JSON.stringify({
+          raise: true,
+          reason: 'I have a relevant contribution.',
+        });
+      } finally {
+        activeEvaluations -= 1;
+      }
+    },
+  });
+  const kickoff = f.workspace.initializeProjectKickoff(
+    f.master.id,
+    f.workspace.ownerId,
+  );
+  expect(f.workspace.collaboration.settings(kickoff.conversation.id).mode).toBe(
+    'meeting',
+  );
+  const published = await f.app.request(
+    `/api/organizational-conversations/${kickoff.conversation.id}/messages`,
+    request({
+      content: 'Please continue the meeting.',
+      activation: 'meeting',
+      idempotencyKey: 'meeting-listen',
+    }),
+  );
+  expect(published.status).toBe(201);
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  const concurrentListeners = peakEvaluations;
+  releaseEvaluations.resolve();
+  await f.service.idle();
+  expect(concurrentListeners).toBe(3);
+  const executions = f.workspace.collaboration.executions(
+    kickoff.conversation.id,
+  );
+  expect(executions.filter((item) => item.kind === 'evaluation')).toHaveLength(
+    3,
+  );
+  expect(executions.filter((item) => item.kind === 'response')).toHaveLength(3);
+  expect(executions.every((item) => item.status === 'succeeded')).toBe(true);
+  f.service.publishHuman(kickoff.conversation.id, {
+    content: 'A note for the record.',
+    activation: 'none',
+    idempotencyKey: 'meeting-publish-only',
+  });
+  await f.service.idle();
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(6);
+});
+
+it('recognizes explicit meeting assignments and resumes only the latest undispatched turn', async () => {
+  const f = fixture({
+    turn: async (execution) =>
+      execution.sessionAgentId === f.agents[0].id
+        ? '- **Paolo** → Prepare the technical note.\n- **Laura** → This name is ambiguous.'
+        : 'Technical note ready.',
+  });
+  const kickoff = f.workspace.initializeProjectKickoff(
+    f.master.id,
+    f.workspace.ownerId,
+  );
+  f.service.settings(kickoff.conversation.id, {
+    mode: 'manual',
+    maxActivations: 8,
+    evaluationBudget: 2,
+  });
+  f.service.publishHuman(kickoff.conversation.id, {
+    content: 'Lead the discussion.',
+    activation: 'mentioned',
+    mentions: [f.mention(kickoff.conversation.id, 0)],
+  });
+  await f.service.idle();
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(1);
+  f.service.settings(kickoff.conversation.id, {
+    mode: 'meeting',
+    maxActivations: 8,
+    evaluationBudget: 2,
+  });
+  f.service.resumeMeetings();
+  await f.service.idle();
+  const executions = f.workspace.collaboration.executions(
+    kickoff.conversation.id,
+  );
+  expect(executions.filter((item) => item.kind === 'response')).toHaveLength(2);
+  expect(executions.at(-1)?.sessionAgentId).toBe(f.agents[1].id);
+  f.service.resumeMeetings();
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(2);
+});
+
+it('parses the four explicit assignments from a Director turn without treating ordinary names as commands', () => {
+  const recipients = [
+    { id: 'ezra', name: 'Ezra' },
+    { id: 'sage', name: 'Sage' },
+    { id: 'cleo', name: 'Cleo' },
+    { id: 'ada', name: 'Ada' },
+  ];
+  const content =
+    'Sage has ideas.\n**Prossimi passi (già assegnati):**\n- **Ezra** → Reality Ledger\n- **Sage** → Beat Sheet\n- **Cleo** → character seeds\n- **Ada** → voice guardrails';
+  expect(meetingAssignmentRecipients(content, recipients)).toEqual([
+    'ezra',
+    'sage',
+    'cleo',
+    'ada',
+  ]);
+});
+
+it('retries a failed meeting assignment explicitly and only while its recipient remains authorized', async () => {
+  let recipientFails = true;
+  const f = fixture({
+    turn: async (execution) => {
+      if (execution.sessionAgentId === f.agents[0].id)
+        return '- **Paolo** → Prepare the technical note.';
+      if (recipientFails) throw new Error('Transient runtime failure.');
+      return 'Technical note ready.';
+    },
+  });
+  const kickoff = f.workspace.initializeProjectKickoff(
+    f.master.id,
+    f.workspace.ownerId,
+  );
+  f.service.publishHuman(kickoff.conversation.id, {
+    content: 'Lead the discussion.',
+    activation: 'mentioned',
+    mentions: [f.mention(kickoff.conversation.id, 0)],
+  });
+  await f.service.idle();
+  const failed = f.workspace.collaboration
+    .executions(kickoff.conversation.id)
+    .find((item) => item.requestId.startsWith('meeting-assignment:'))!;
+  expect(failed.status).toBe('failed');
+  recipientFails = false;
+  f.service.retryMeetingAssignment(kickoff.conversation.id, failed.id);
+  await f.service.idle();
+  const attempts = f.workspace.collaboration
+    .executions(kickoff.conversation.id)
+    .filter((item) => item.sessionAgentId === f.agents[1].id);
+  expect(attempts.map((item) => item.status)).toEqual(['failed', 'succeeded']);
+  expect(() =>
+    f.service.retryMeetingAssignment(kickoff.conversation.id, failed.id),
+  ).toThrow(/latest failed or interrupted/);
+  f.workspace.setSessionAgentStatus(f.agents[1].id, 'removed');
+  expect(
+    f.workspace.collaboration.executions(kickoff.conversation.id),
+  ).toHaveLength(3);
 });

@@ -30,7 +30,7 @@ afterEach(() => {
   resources.splice(0).forEach((resource) => resource.close());
 });
 
-it('uses 90 seconds by default and accepts a positive integer override', () => {
+it('uses five minutes by default and accepts a positive integer override', () => {
   expect(agentRunTimeoutMsFromEnv({})).toBe(DEFAULT_AGENT_RUN_TIMEOUT_MS);
   expect(agentRunTimeoutMsFromEnv({ AGENT_RUN_TIMEOUT_MS: ' 240000 ' })).toBe(
     240_000,

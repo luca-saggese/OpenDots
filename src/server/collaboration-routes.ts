@@ -32,7 +32,7 @@ export function collaborationRoutes(service: CollaborationService) {
   app.put('/:id/collaboration', async (c) => {
     const data = z
       .object({
-        mode: z.enum(['manual', 'hand_raise']),
+        mode: z.enum(['manual', 'hand_raise', 'meeting']),
         maxActivations: z.number().int().min(1).max(8),
         evaluationBudget: z.number().int().min(1).max(4),
       })
@@ -69,6 +69,18 @@ export function collaborationRoutes(service: CollaborationService) {
       .parse(await c.req.json());
     return c.json(
       service.retryPublication(c.req.param('id'), c.req.param('executionId')),
+    );
+  });
+  app.post('/:id/executions/:executionId/retry', async (c) => {
+    z.object({})
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      service.retryMeetingAssignment(
+        c.req.param('id'),
+        c.req.param('executionId'),
+      ),
+      202,
     );
   });
   return app;

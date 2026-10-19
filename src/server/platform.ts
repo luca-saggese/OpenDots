@@ -237,6 +237,7 @@ export class Platform {
       }
     }
     this.projectWork.start();
+    this.collaboration.resumeMeetings();
   }
   async stop() {
     await this.projectWork.stop();

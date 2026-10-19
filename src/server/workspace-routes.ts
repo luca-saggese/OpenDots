@@ -473,7 +473,7 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
         .default('conversation'),
       idempotencyKey: z.string().trim().min(1).max(200).optional(),
       mentions: z.array(mentionSchema).max(100).optional(),
-      activation: z.enum(['none', 'mentioned', 'direct']).optional(),
+      activation: z.enum(['none', 'mentioned', 'direct', 'meeting']).optional(),
     })
     .strict();
   app.get('/master-sessions/:id/conversations', (c) => {

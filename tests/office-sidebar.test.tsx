@@ -162,6 +162,7 @@ it('separates projects from native Spaces, persists foldable state, and opens pr
         nativeChatEnabled
         onOpenProject={onOpenProject}
         onOpenConversation={onOpenConversation}
+        onOpenAllConversations={vi.fn()}
         onOpenDotProfile={vi.fn()}
         onOpenDirect={onOpenDirect}
         onOpenSpace={vi.fn()}

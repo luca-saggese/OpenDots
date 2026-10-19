@@ -75,6 +75,7 @@ export function App() {
   const [officeNavigation, setOfficeNavigation] = useState<{
     projectId: string;
     conversationId?: string;
+    showConversationList?: boolean;
     tab: 'overview' | 'team' | 'conversations';
     requestId: string;
   }>();
@@ -269,11 +270,13 @@ export function App() {
     projectId: string,
     conversationId?: string,
     tab: 'overview' | 'team' | 'conversations' = 'conversations',
+    showConversationList = false,
   ) => {
     setOfficeNavigation({
       projectId,
       conversationId,
       tab,
+      showConversationList,
       requestId: crypto.randomUUID(),
     });
     setActiveOfficeProjectId(projectId);
@@ -501,6 +504,9 @@ export function App() {
           onOpenProject={(id, tab) => openOfficeProject(id, undefined, tab)}
           onOpenConversation={(projectId, conversationId) =>
             openOfficeProject(projectId, conversationId, 'conversations')
+          }
+          onOpenAllConversations={(projectId) =>
+            openOfficeProject(projectId, undefined, 'conversations', true)
           }
           onOpenDotProfile={(id) => {
             setOfficeProfileDotId(id);
@@ -905,6 +911,7 @@ export function App() {
             }}
             onOpenDirect={openOfficeDirect}
             onNavigationRefresh={refreshOfficeNavigation}
+            onOpenPage={(spaceId, pageId) => openPage(spaceId, pageId)}
           />
         ) : (
           <main className="main-content">

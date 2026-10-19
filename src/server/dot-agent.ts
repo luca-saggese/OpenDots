@@ -382,6 +382,8 @@ export class DotAgent extends AbstractAgent {
               messages: converted.messages,
               systemPrompts: [
                 prompt,
+                'Whenever a page tool creates, edits, or appends a page, include a clickable Markdown link using the returned url so the owner can open the saved page directly.',
+                'For long documents, avoid rewriting the entire page to finish it: create or edit the opening, then append one complete section at a time with append_space_page_section and a stable sectionKey. Use the updated page and revision returned by each append for the next section, then read the page once more to verify the final heading and ending before saying the document is complete. If an append reports a conflict, read the latest page and do not repeat or overwrite content blindly.',
                 `Permanent SOUL instructions: ${this.workspace.dotProfile(dot.id).soulInstructions}`,
                 ...(collaborationContext ? [collaborationContext] : []),
                 ...converted.systemPrompts,
@@ -393,7 +395,7 @@ export class DotAgent extends AbstractAgent {
               threadId: ctx.input.threadId,
               runId: ctx.input.runId,
               modelOptions: {
-                max_completion_tokens: 2200,
+                max_completion_tokens: 8192,
                 ...(isOpenRouterDeepSeekV4 ? { reasoning_effort: 'low' } : {}),
               },
               agentLoopStrategy: maxIterations(

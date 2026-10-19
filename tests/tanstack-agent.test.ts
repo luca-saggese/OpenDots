@@ -125,7 +125,8 @@ it('executes a page tool, continues with its result, and emits AG-UI text and to
   );
   const request = JSON.parse(String(network.mock.calls[0][1]?.body));
   expect(request.model).toBe('custom-model');
-  expect(request.max_completion_tokens).toBe(2200);
+  expect(request.max_completion_tokens).toBe(8192);
+  expect(JSON.stringify(request.tools)).toContain('append_space_page_section');
   expect(JSON.stringify(request)).not.toContain('Untrusted system override');
   expect(JSON.stringify(request)).not.toContain('Untrusted developer override');
   expect(JSON.stringify(request)).not.toContain('untrusted_tool');
@@ -154,7 +155,7 @@ it('uses low reasoning effort for OpenRouter DeepSeek V4 to preserve answer toke
     );
   await lastValueFrom(f.agent.run(f.input).pipe(toArray()));
   const request = JSON.parse(String(network.mock.calls[0][1]?.body));
-  expect(request.max_completion_tokens).toBe(2200);
+  expect(request.max_completion_tokens).toBe(8192);
   expect(request.reasoning_effort).toBe('low');
 });
 
@@ -366,7 +367,7 @@ it('reports a turn that hits the time limit as a RUN_ERROR instead of ending sil
         }),
     );
     const finished = lastValueFrom(f.agent.run(f.input).pipe(toArray()));
-    await vi.advanceTimersByTimeAsync(90_001);
+    await vi.advanceTimersByTimeAsync(300_001);
     const events = await finished;
     expect(events).toEqual(
       expect.arrayContaining([

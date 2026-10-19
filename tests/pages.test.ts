@@ -52,6 +52,40 @@ it('rejects cross-space parents, cycles and stale writes without losing content'
   expect(() => store.pages.get(b, root.id)).toThrow();
   store.close();
 });
+it('appends document sections with revision checks and idempotent retries', () => {
+  const store = new WorkspaceStore(':memory:', 'owner');
+  const space = store.spaces()[0].id;
+  const page = store.pages.create(space, {
+    title: 'Character Seeds',
+    content: '# Narrator\n\nOpening section.',
+  });
+  const section = {
+    sectionKey: 'supporting-figures',
+    content: '## Supporting figures\n\nComplete section.',
+    expectedRevision: page.revision,
+  };
+  const appended = store.pages.appendSection(space, page.id, section);
+  expect(appended).toMatchObject({
+    revision: 2,
+    content: `${page.content}\n\n${section.content}`,
+  });
+  expect(store.pages.appendSection(space, page.id, section)).toEqual(appended);
+  expect(() =>
+    store.pages.appendSection(space, page.id, {
+      ...section,
+      content: 'Different content for the same key.',
+    }),
+  ).toThrow(/already used/);
+  expect(() =>
+    store.pages.appendSection(space, page.id, {
+      sectionKey: 'architectural-silences',
+      content: '## Architectural silences',
+      expectedRevision: page.revision,
+    }),
+  ).toThrow(/changed/);
+  expect(store.pages.get(space, page.id)).toEqual(appended);
+  store.close();
+});
 it('migrates review receipts and retains their original draft after restart', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dots-reviews-'));
   const path = join(dir, 'db');

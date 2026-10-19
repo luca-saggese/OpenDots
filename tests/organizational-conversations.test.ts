@@ -178,6 +178,7 @@ it('lists ACL-filtered summaries and opens the same private project conversation
         request({
           content: 'private project update',
           idempotencyKey: 'summary-message',
+          activation: 'none',
         }),
       )
     ).status,
@@ -209,7 +210,7 @@ it('hides earlier messages from late joiners and preserves separate access inter
   const postMessage = (content: string, idempotencyKey: string) =>
     app.request(
       `/api/organizational-conversations/${conversation.id}/messages`,
-      request({ content, idempotencyKey }),
+      request({ content, idempotencyKey, activation: 'none' }),
     );
   expect((await postMessage('first', 'first')).status).toBe(201);
   expect(
@@ -444,7 +445,10 @@ it('prevents conversation owners and session peers from bypassing private ACLs',
     (
       await app.request(
         `/api/organizational-conversations/${secondConversation.id}/messages`,
-        request({ content: 'cannot post to other private conversation' }),
+        request({
+          content: 'cannot post to other private conversation',
+          activation: 'none',
+        }),
       )
     ).status,
   ).toBe(201);

@@ -257,7 +257,7 @@ export type CollaborationMention =
       displayName: string;
     }
   | { type: 'all'; conversationId: string };
-export type CollaborationMode = 'manual' | 'hand_raise';
+export type CollaborationMode = 'manual' | 'hand_raise' | 'meeting';
 export interface CollaborationExecution {
   id: string;
   requestId: string;
@@ -278,6 +278,8 @@ export interface CollaborationExecution {
   createdAt: number;
   completedAt: number | null;
   handRaiseId: string | null;
+  meetingRootId?: string | null;
+  meetingDepth?: number;
 }
 export interface HandRaise {
   id: string;

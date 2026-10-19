@@ -25,6 +25,7 @@ import type {
 import { api } from './api';
 import { Mascot } from './Mascot';
 import { ProjectConversations } from './ProjectConversations';
+import { ProjectFiles } from './ProjectFiles';
 import { ProjectWork } from './ProjectWork';
 
 type RosterItem = {
@@ -97,12 +98,14 @@ export function Office({
   onOpenDirect,
   onConversationChange,
   onNavigationRefresh,
+  onOpenPage,
 }: {
   workspace: WorkspaceState;
   onRefresh: () => Promise<void>;
   navigationRequest?: {
     projectId: string;
     conversationId?: string;
+    showConversationList?: boolean;
     tab: 'overview' | 'team' | 'conversations';
     requestId: string;
   };
@@ -115,6 +118,7 @@ export function Office({
   onOpenDirect: (projectId: string, sessionAgentId: string) => Promise<void>;
   onConversationChange: (conversationId?: string, title?: string) => void;
   onNavigationRefresh: () => void;
+  onOpenPage: (spaceId: string, pageId?: string) => void;
 }) {
   const [roster, setRoster] = useState<RosterItem[]>([]);
   const [members, setMembers] = useState<MemberTemplate[]>([]);
@@ -135,7 +139,7 @@ export function Office({
   const [projectNameError, setProjectNameError] = useState('');
   const [savingProjectName, setSavingProjectName] = useState(false);
   const [projectTab, setProjectTab] = useState<
-    'overview' | 'team' | 'conversations' | 'work' | 'activity'
+    'overview' | 'team' | 'conversations' | 'work' | 'files' | 'activity'
   >('overview');
   const [projectAgents, setProjectAgents] = useState<SessionAgent[]>([]);
   const [kickoffConversationId, setKickoffConversationId] = useState<string>();
@@ -165,6 +169,9 @@ export function Office({
   const [projectMemberCustomization, setProjectMemberCustomization] =
     useState('');
   const [catalogSearch, setCatalogSearch] = useState('');
+  const projectSpace = project
+    ? workspace.spaces.find((item) => item.id === project.spaceId)
+    : undefined;
 
   const refreshOffice = async () => {
     setLoading(true);
@@ -314,6 +321,7 @@ export function Office({
     if (!navigationRequest) return;
     let current = true;
     void (async () => {
+      setRequestedConversationId(undefined);
       await openProject(navigationRequest.projectId);
       if (!current) return;
       setProjectTab(navigationRequest.tab);
@@ -601,7 +609,14 @@ export function Office({
         <section className="office-project">
           <nav className="project-tabs" aria-label="Project sections">
             {(
-              ['conversations', 'work', 'team', 'overview', 'activity'] as const
+              [
+                'conversations',
+                'work',
+                'files',
+                'team',
+                'overview',
+                'activity',
+              ] as const
             ).map((tab) => (
               <button
                 key={tab}
@@ -882,6 +897,7 @@ export function Office({
           )}
           {projectTab === 'conversations' && (
             <ProjectConversations
+              key={`${project.id}:${navigationRequest?.requestId ?? 'local'}`}
               masterSessionId={project.id}
               agents={projectAgents}
               roster={roster}
@@ -899,6 +915,7 @@ export function Office({
               }}
               kickoffTargets={kickoffTargets}
               requestedConversationId={requestedConversationId}
+              showConversationList={navigationRequest?.showConversationList}
               onConversationChange={(conversationId, title) => {
                 setRequestedConversationId(undefined);
                 onConversationChange(conversationId, title);
@@ -910,6 +927,18 @@ export function Office({
           {projectTab === 'work' && (
             <ProjectWork masterSessionId={project.id} agents={projectAgents} />
           )}
+          {projectTab === 'files' &&
+            (projectSpace ? (
+              <ProjectFiles
+                space={projectSpace}
+                onOpenPage={onOpenPage}
+                onOpenSpace={(spaceId) => onOpenPage(spaceId)}
+              />
+            ) : (
+              <p className="chat-error" role="alert">
+                Project Space is not available.
+              </p>
+            ))}
           {projectTab === 'activity' && (
             <div className="large-empty">
               <h2>Project activity</h2>

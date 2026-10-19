@@ -767,9 +767,19 @@ export class ProjectWorkService {
     for (let task of store
       .tasks(masterSessionId)
       .filter((item) => item.planId === activePlanId)) {
-      if (task.status === 'running' && !task.executionId && task.currentMode) {
+      if (task.status === 'running' && !task.executionId) {
         try {
-          await this.startTaskExecution(task, task.currentMode);
+          const continued =
+            store
+              .consultations(masterSessionId)
+              .some((item) => item.taskId === task.id) ||
+            store
+              .tasks(masterSessionId)
+              .some((item) => item.parentTaskId === task.id);
+          await this.startTaskExecution(
+            task,
+            task.currentMode ?? (continued ? 'continue' : 'begin'),
+          );
         } catch (error) {
           this.blockTask(
             task.id,
@@ -783,7 +793,7 @@ export class ProjectWorkService {
         task.status === 'in_review' &&
         task.stage === 'review' &&
         !task.executionId &&
-        task.currentMode === 'review'
+        task.reviewerSessionAgentId
       ) {
         try {
           await this.startTaskExecution(task, 'review');
